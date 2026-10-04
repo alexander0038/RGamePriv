@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1v1 Battle</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<!-- =========================================================
+     CHARAKTERAUSWAHL
+========================================================= -->
+
+<div id="character-select">
+
+    <h1>1V1 BATTLE</h1>
+
+    <div class="players">
+
+        <!-- SPIELER 1 -->
+        <div class="player-select">
+
+            <h2>SPIELER 1</h2>
+
+            <p>
+                A/D = Bewegung |
+                W = Springen |
+                S = Durchfallen |
+                E = Angriff |
+                Q = Spezial |
+                Linke Shift = Dash
+            </p>
+
+            <div id="characters-p1" class="characters"></div>
+
+            <div id="selected-name1" class="selected-name">
+                Kein Charakter ausgewählt
+            </div>
+
+            <div id="ready1" class="ready">NICHT BEREIT</div>
+
+            <button onclick="readyPlayer(1)">KAMPFBEREIT</button>
+
+        </div>
+
+
+        <!-- SPIELER 2 -->
+        <div class="player-select">
+
+            <h2>SPIELER 2</h2>
+
+            <p>
+                J/L = Bewegung |
+                I = Springen |
+                K = Durchfallen |
+                O = Angriff |
+                U = Spezial |
+                Rechte Shift = Dash
+            </p>
+
+            <div id="characters-p2" class="characters"></div>
+
+            <div id="selected-name2" class="selected-name">
+                Kein Charakter ausgewählt
+            </div>
+
+            <div id="ready2" class="ready">NICHT BEREIT</div>
+
+            <button onclick="readyPlayer(2)">KAMPFBEREIT</button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     SPIEL
+========================================================= -->
+
+<div id="game" class="hidden">
+
+    <div id="arena">
+
+        <div id="background"></div>
+
+        <!-- Boden + schwebende Blöcke (werden per JS gebaut) -->
+        <div id="ground"></div>
+        <div id="platforms"></div>
+        <div id="items"></div>
+
+        <div id="hud">
+
+            <div class="health-container">
+                <div class="name" id="name1">SPIELER 1</div>
+                <div class="health-bar"><div id="hp1" class="health"></div></div>
+                <div id="special1" class="special">SPEZIAL: 0 / 5</div>
+                <div id="effects1" class="effects"></div>
+            </div>
+
+            <div id="timer">0:00</div>
+
+            <div class="health-container">
+                <div class="name" id="name2">SPIELER 2</div>
+                <div class="health-bar"><div id="hp2" class="health"></div></div>
+                <div id="special2" class="special">SPEZIAL: 0 / 5</div>
+                <div id="effects2" class="effects"></div>
+            </div>
+
+        </div>
+
+        <img id="attack-effect1" class="attack-effect" alt="">
+        <img id="attack-effect2" class="attack-effect" alt="">
+
+        <div id="player1" class="fighter">
+            <img id="player1-img" alt="Spieler 1">
+        </div>
+
+        <div id="player2" class="fighter">
+            <img id="player2-img" alt="Spieler 2">
+        </div>
+
+        <div id="message"></div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     GAME OVER
+========================================================= -->
+
+<div id="game-over" class="hidden">
+
+    <h1 id="winner">SPIELER 1 GEWINNT!</h1>
+
+    <button onclick="location.reload()">NOCHMAL SPIELEN</button>
+
+</div>
+
+
+<script>
+
+/* =========================================================
+   KONSTANTEN
+========================================================= */
+
+/* Spielergröße (muss zu .fighter in style.css passen) */
+const PLAYER_W = 180;
+const PLAYER_H = 210;
+
+/* Physik (Einheiten: Pixel pro 60-FPS-Frame) */
+const GRAVITY = 0.65;
+const JUMP_SPEED = -22;      /* Sprunghöhe ca. 360 px */
+const MAX_FALL = 30;
+const FOOT_HALF = 45;        /* halbe Fußbreite für die Landung auf Blöcken */
+const SIDE_MARGIN = 70;      /* Abstand zum linken/rechten Rand */
+const DROP_TIME = 200;       /* ms, in denen man durch Blöcke nach unten fällt */
+
+/* Boden */
+const GROUND_H = 110;        /* Höhe des Boden-PNGs in Pixeln */
+const HUD_SAFE = 100;        /* Platz für die Lebensanzeige oben */
+
+/*
+ * Schwebende Blöcke (fest, bewegen sich nicht):
+ *   cx     = Mitte in Prozent der Arena-Breite
+ *   height = Höhe der Oberkante über dem Boden in Pixeln
+ */
+const BLOCK_WIDTH = 300;
+const BLOCK_LAYOUT = [
+    { name: "BlockA", cx: 0.20, height: 240 },
+    { name: "BlockB", cx: 0.50, height: 420 },
+    { name: "BlockC", cx: 0.80, height: 320 }
+];
+
+/* Reichweiten (Mittelpunkt zu Mittelpunkt) */
+const REACH_ATTACK = 210;
+const REACH_PUSH = 230;
+const REACH_SPECIAL = 210;
+
+/* Abstand der Angriffs-PNG zur Spielermitte (kleiner = näher dran) */
+const ATTACK_OFFSET = 75;
+
+/* Special Items */
+const ITEM_SPAWN_INTERVAL = 7500;   /* alle 7,5 Sekunden */
+const ITEM_LIFETIME = 15000;        /* verschwindet nach 15 s */
+const MAX_ITEMS = 3;                /* höchstens so viele gleichzeitig */
+const ITEM_LIFT = 90;               /* Schwebehöhe über der Fläche */
+const ITEM_PICKUP_RADIUS = 95;
+const HEAL_ITEM = 25;
+const SPEED_BOOST = 1.5;
+const DAMAGE_BOOST = 1.5;
+const BOOST_TIME = 6000;
+const SHIELD_TIME = 10000;
+
+const HEAL_DELAY = 5000;
+const HEAL_INTERVAL = 1000;
+const HEAL_AMOUNT = 2.5;
+
+const IMG_CHAR = "{{ url_for('static', filename='charactere/') }}";
+const IMG_ATTACK = "{{ url_for('static', filename='attacken/') }}";
+const IMG_LEVEL = "{{ url_for('static', filename='BBBB/') }}";
+const IMG_BG = "{{ url_for('static', filename='Hintergrund/hintergrund.png') }}";
+
+
+/* =========================================================
+   CHARAKTERDATEN
+========================================================= */
+
+const characters = {
+
+    Elia: {
+        hp: 100, speed: 3.2, damage: 15, cooldown: 1400,
+        attack: "EliaSchlag", special: "precision"
+    },
+
+    Toni: {
+        hp: 80, speed: 3.8, damage: 10, cooldown: 800,
+        attack: "ToniKlatsche", special: "complain"
+    },
+
+    Alex: {
+        hp: 100, speed: 3.2, damage: 12.5, cooldown: 1000,
+        attack: "AlexTritt", special: "kick"
+    },
+
+    HenningPrime: {
+        hp: 80, speed: 3.8, damage: 10, cooldown: 750,
+        attack: "HenningKratzer", special: "teleport"
+    },
+
+    MaxH: {
+        hp: 120, speed: 2.8, damage: 15, cooldown: 1500,
+        attack: "MaxBauchStoss", special: "push"
+    }
+
+};
+
+
+/* =========================================================
+   SPIELER
+
+   x, y        : Mitte der Füße
+   vy          : vertikale Geschwindigkeit
+   kx          : Knockback (horizontal, klingt ab)
+   facing      : Blickrichtung (1 = rechts, -1 = links)
+   platform    : Block, auf dem man steht (null = Boden / Luft)
+   dropUntil   : bis dahin fällt man durch Blöcke
+   disabledUntil / rootedUntil / fleeUntil : wie bisher
+========================================================= */
+
+function createPlayer() {
+
+    return {
+        x: 0,
+        y: 0,
+        vy: 0,
+        kx: 0,
+
+        facing: 1,
+        onGround: false,
+        platform: null,
+        dropUntil: 0,
+
+        hp: 100,
+        maxHp: 100,
+
+        character: null,
+
+        hits: 0,
+
+        lastHit: 0,
+        lastHeal: 0,
+        lastAttack: 0,
+        lastDash: 0,
+
+        specialReady: false,
+
+        disabledUntil: 0,
+        rootedUntil: 0,
+        fleeUntil: 0,
+
+        speedUntil: 0,
+        damageUntil: 0,
+        shieldUntil: 0
+    };
+
+}
+
+let players = {
+    1: createPlayer(),
+    2: createPlayer()
+};
+
+
+/* =========================================================
+   LEVEL
+========================================================= */
+
+const level = {
+    width: 0,
+    groundTop: 0,
+    platforms: []
+};
+
+const blockRatio = {};   /* Höhe/Breite der Block-PNGs */
+
+
+/* =========================================================
+   AUSWAHL
+========================================================= */
+
+let selected1 = null;
+let selected2 = null;
+
+let ready1 = false;
+let ready2 = false;
+
+let gameStarted = false;
+let starting = false;
+
+let startTime = Date.now();
+let lastFrameTime = 0;
+
+let lastItemSpawn = 0;
+let items = [];
+
+
+/* =========================================================
+   TASTEN
+========================================================= */
+
+const keys = {};
+
+
+document.addEventListener("keydown", function(event) {
+
+    const key = event.key.toLowerCase();
+
+    keys[key] = true;
+
+    if (!gameStarted || event.repeat) {
+        return;
+    }
+
+    if (key === "e") attack(1);
+    if (key === "o") attack(2);
+
+    if (key === "q") special(1);
+    if (key === "u") special(2);
+
+    if (key === "w") jump(1);
+    if (key === "i") jump(2);
+
+    if (key === "s") dropDown(1);
+    if (key === "k") dropDown(2);
+
+    if (event.key === "Shift") {
+
+        if (event.location === KeyboardEvent.DOM_KEY_LOCATION_LEFT) {
+            dash(1);
+        }
+
+        if (event.location === KeyboardEvent.DOM_KEY_LOCATION_RIGHT) {
+            dash(2);
+        }
+
+    }
+
+});
+
+
+document.addEventListener("keyup", function(event) {
+
+    keys[event.key.toLowerCase()] = false;
+
+});
+
+
+function releaseAllKeys() {
+
+    Object.keys(keys).forEach(function(k) {
+        keys[k] = false;
+    });
+
+}
+
+window.addEventListener("blur", releaseAllKeys);
+
+document.addEventListener("visibilitychange", function() {
+
+    if (document.hidden) {
+        releaseAllKeys();
+    }
+
+});
+
+
+/* =========================================================
+   CHARAKTERBUTTONS ERSTELLEN
+========================================================= */
+
+function createCharacterButtons() {
+
+    [1, 2].forEach(function(player) {
+
+        const container =
+            document.getElementById("characters-p" + player);
+
+        Object.keys(characters).forEach(function(name) {
+
+            const img = document.createElement("img");
+
+            img.src = IMG_CHAR + name + ".png";
+            img.className = "character-option";
+            img.title = name;
+
+            img.onclick = function() {
+                selectCharacter(player, name, img);
+            };
+
+            container.appendChild(img);
+
+        });
+
+    });
+
+}
+
+
+/* =========================================================
+   CHARAKTER AUSWÄHLEN
+========================================================= */
+
+function selectCharacter(player, name, element) {
+
+    if (player === 1 && ready1) return;
+    if (player === 2 && ready2) return;
+
+    if (player === 1) {
+        selected1 = name;
+    } else {
+        selected2 = name;
+    }
+
+    document.getElementById(
+        "selected-name" + player
+    ).textContent = name;
+
+    document
+        .getElementById("characters-p" + player)
+        .querySelectorAll(".character-option")
+        .forEach(function(el) {
+            el.classList.remove("selected");
+        });
+
+    element.classList.add("selected");
+
+}
+
+
+/* =========================================================
+   BEREIT
+========================================================= */
+
+function readyPlayer(player) {
+
+    const chosen = player === 1 ? selected1 : selected2;
+
+    if (!chosen) {
+        alert("Spieler " + player + " muss zuerst einen Charakter auswählen.");
+        return;
+    }
+
+    let isReady;
+
+    if (player === 1) {
+        ready1 = !ready1;
+        isReady = ready1;
+    } else {
+        ready2 = !ready2;
+        isReady = ready2;
+    }
+
+    const label = document.getElementById("ready" + player);
+
+    label.textContent = isReady ? "BEREIT!" : "NICHT BEREIT";
+    label.classList.toggle("ready-active", isReady);
+
+    if (ready1 && ready2) {
+        startGame();
+    }
+
+}
+
+
+/* =========================================================
+   LEVEL-BILDER LADEN (für die Block-Proportionen)
+========================================================= */
+
+function loadImage(src) {
+
+    return new Promise(function(resolve) {
+
+        const img = new Image();
+
+        img.onload = function() { resolve(img); };
+        img.onerror = function() { resolve(null); };
+
+        img.src = src;
+
+    });
+
+}
+
+
+async function loadLevelImages() {
+
+    await Promise.all(BLOCK_LAYOUT.map(async function(def) {
+
+        const img = await loadImage(IMG_LEVEL + def.name + ".png");
+
+        blockRatio[def.name] =
+            img && img.naturalWidth
+                ? img.naturalHeight / img.naturalWidth
+                : 0.25;
+
+    }));
+
+    await loadImage(IMG_LEVEL + "Boden.png");
+
+}
+
+
+/* =========================================================
+   LEVEL AUFBAUEN
+========================================================= */
+
+function buildLevel() {
+
+    const arena = document.getElementById("arena");
+
+    const w = arena.clientWidth;
+    const h = arena.clientHeight;
+
+    level.width = w;
+    level.groundTop = h - GROUND_H;
+
+
+    /* Boden */
+    const ground = document.getElementById("ground");
+
+    ground.style.height = GROUND_H + "px";
+    ground.style.backgroundImage =
+        "url('" + IMG_LEVEL + "Boden.png')";
+
+
+    /*
+     * Auf kleinen Fenstern die Blockhöhen verkleinern, damit
+     * Spieler auf dem höchsten Block nicht in die Lebensanzeige ragen.
+     */
+    const highest = Math.max.apply(null, BLOCK_LAYOUT.map(b => b.height));
+    const available = level.groundTop - HUD_SAFE - PLAYER_H;
+    const factor = Math.max(0.4, Math.min(1, available / highest));
+
+    const blockW = Math.min(BLOCK_WIDTH, w * 0.22);
+
+
+    /* Blöcke */
+    const container = document.getElementById("platforms");
+
+    container.innerHTML = "";
+
+    level.platforms = BLOCK_LAYOUT.map(function(def) {
+
+        const blockH = blockW * (blockRatio[def.name] || 0.25);
+
+        const left = w * def.cx - blockW / 2;
+        const top = level.groundTop - def.height * factor;
+
+        const img = document.createElement("img");
+
+        img.src = IMG_LEVEL + def.name + ".png";
+        img.className = "platform";
+        img.alt = "";
+
+        img.style.left = left + "px";
+        img.style.top = top + "px";
+        img.style.width = blockW + "px";
+        img.style.height = blockH + "px";
+
+        container.appendChild(img);
+
+        /*
+         * Begehbare Fläche = Oberkante des PNGs.
+         * Hat ein PNG oben transparenten Rand, hier einen Versatz
+         * einrechnen: top: top + 12
+         */
+        return {
+            left: left,
+            right: left + blockW,
+            top: top
+        };
+
+    });
+
+}
+
+
+window.addEventListener("resize", function() {
+
+    if (!gameStarted) {
+        return;
+    }
+
+    buildLevel();
+    clearItems();
+
+    [1, 2].forEach(function(n) {
+        clampX(players[n]);
+        players[n].onGround = false;
+        players[n].platform = null;
+    });
+
+});
+
+
+/* =========================================================
+   SPIEL STARTEN
+========================================================= */
+
+async function startGame() {
+
+    if (starting || gameStarted) {
+        return;
+    }
+
+    starting = true;
+
+    await loadLevelImages();
+
+
+    players[1] = createPlayer();
+    players[2] = createPlayer();
+
+    players[1].character = selected1;
+    players[2].character = selected2;
+
+    players[1].hp = players[1].maxHp = characters[selected1].hp;
+    players[2].hp = players[2].maxHp = characters[selected2].hp;
+
+    players[1].facing = 1;
+    players[2].facing = -1;
+
+
+    document.getElementById("name1").textContent = selected1;
+    document.getElementById("name2").textContent = selected2;
+
+    document.getElementById("player1-img").src =
+        IMG_CHAR + selected1 + ".png";
+
+    document.getElementById("player2-img").src =
+        IMG_CHAR + selected2 + ".png";
+
+    document.getElementById("background").style.backgroundImage =
+        "url('" + IMG_BG + "')";
+
+
+    document.getElementById("character-select").classList.add("hidden");
+    document.getElementById("game").classList.remove("hidden");
+
+
+    /* Erst jetzt ist die Arena messbar. */
+    buildLevel();
+
+    players[1].x = level.width * 0.10;
+    players[2].x = level.width * 0.90;
+
+    players[1].y = level.groundTop;
+    players[2].y = level.groundTop;
+
+    players[1].onGround = true;
+    players[2].onGround = true;
+
+
+    const now = Date.now();
+
+    [1, 2].forEach(function(n) {
+        players[n].lastHit = now;
+        players[n].lastHeal = now;
+    });
+
+    startTime = now;
+    lastFrameTime = 0;
+
+    clearItems();
+    lastItemSpawn = now;
+
+    releaseAllKeys();
+
+    gameStarted = true;
+    starting = false;
+
+    requestAnimationFrame(gameLoop);
+
+}
+
+
+/* =========================================================
+   HILFSFUNKTIONEN
+========================================================= */
+
+function clampX(p) {
+
+    const min = SIDE_MARGIN;
+    const max = Math.max(min, level.width - SIDE_MARGIN);
+
+    if (p.x < min) { p.x = min; p.kx = 0; }
+    if (p.x > max) { p.x = max; p.kx = 0; }
+
+}
+
+
+function distance(a, b) {
+
+    return Math.hypot(a.x - b.x, a.y - b.y);
+
+}
+
+
+function otherPlayer(player) {
+
+    return player === 1 ? 2 : 1;
+
+}
+
+
+/*
+ * Trefferbereich: Gegner in Reichweite UND vor dem Spieler
+ * (in Blickrichtung).
+ */
+function inReach(p, enemy, range) {
+
+    if (distance(p, enemy) > range) {
+        return false;
+    }
+
+    return (enemy.x - p.x) * p.facing >= -30;
+
+}
+
+
+function isLocked(p) {
+
+    const now = Date.now();
+
+    return (
+        now < p.disabledUntil ||
+        now < p.rootedUntil ||
+        now < p.fleeUntil
+    );
+
+}
+
+
+/* =========================================================
+   BEWEGUNG (links/rechts)
+========================================================= */
+
+function move(player, dt) {
+
+    const p = players[player];
+    const now = Date.now();
+
+    if (now < p.disabledUntil) {
+        return;
+    }
+
+    let speed = characters[p.character].speed * dt;
+
+    if (now < p.speedUntil) {
+        speed *= SPEED_BOOST;
+    }
+
+
+    /* Toni-Spezial: läuft automatisch vom Gegner weg */
+    if (now < p.fleeUntil) {
+
+        const enemy = players[otherPlayer(player)];
+
+        const dir = Math.sign(p.x - enemy.x) || -p.facing;
+
+        p.x += dir * speed;
+        p.facing = dir;
+
+        clampX(p);
+
+        return;
+
+    }
+
+
+    /* Alex-Spezial: bewegungsunfähig */
+    if (now < p.rootedUntil) {
+        return;
+    }
+
+
+    let dx = 0;
+
+    if (player === 1) {
+        if (keys["a"]) dx -= 1;
+        if (keys["d"]) dx += 1;
+    } else {
+        if (keys["j"]) dx -= 1;
+        if (keys["l"]) dx += 1;
+    }
+
+    if (dx !== 0) {
+        p.x += dx * speed;
+        p.facing = dx;
+    }
+
+    clampX(p);
+
+}
+
+
+/* =========================================================
+   PHYSIK (Schwerkraft, Boden, Blöcke von unten durchlässig)
+========================================================= */
+
+function applyPhysics(p, dt) {
+
+    const now = Date.now();
+    const prevY = p.y;
+
+
+    /* Knockback */
+    p.x += p.kx * dt;
+    p.kx *= Math.pow(0.9, dt);
+
+    if (Math.abs(p.kx) < 0.1) {
+        p.kx = 0;
+    }
+
+    clampX(p);
+
+
+    /* Schwerkraft */
+    p.vy = Math.min(p.vy + GRAVITY * dt, MAX_FALL);
+    p.y += p.vy * dt;
+
+    p.onGround = false;
+    p.platform = null;
+
+
+    /*
+     * Blöcke: nur beim Fallen von OBEN landen.
+     * Von unten und von der Seite sind sie durchlässig.
+     */
+    if (p.vy >= 0 && now >= p.dropUntil) {
+
+        let best = null;
+
+        level.platforms.forEach(function(plat) {
+
+            const overX =
+                p.x + FOOT_HALF > plat.left &&
+                p.x - FOOT_HALF < plat.right;
+
+            const crossed =
+                prevY <= plat.top + 1 &&
+                p.y >= plat.top;
+
+            if (overX && crossed) {
+                if (!best || plat.top < best.top) {
+                    best = plat;
+                }
+            }
+
+        });
+
+        if (best) {
+            p.y = best.top;
+            p.vy = 0;
+            p.onGround = true;
+            p.platform = best;
+        }
+
+    }
+
+
+    /* Boden: nicht durchfallbar */
+    if (p.y >= level.groundTop) {
+        p.y = level.groundTop;
+        p.vy = 0;
+        p.onGround = true;
+        p.platform = null;
+    }
+
+
+    /* Decke (Lebensanzeige) */
+    const ceiling = PLAYER_H + 10;
+
+    if (p.y < ceiling) {
+        p.y = ceiling;
+        p.vy = Math.max(p.vy, 0);
+    }
+
+}
+
+
+function jump(player) {
+
+    const p = players[player];
+
+    if (!gameStarted || isLocked(p)) {
+        return;
+    }
+
+    if (p.onGround) {
+        p.vy = JUMP_SPEED;
+        p.onGround = false;
+        p.platform = null;
+    }
+
+}
+
+
+/* Durch einen Block nach unten fallen (nicht durch den Boden) */
+function dropDown(player) {
+
+    const p = players[player];
+
+    if (!gameStarted || isLocked(p)) {
+        return;
+    }
+
+    if (p.onGround && p.platform) {
+        p.dropUntil = Date.now() + DROP_TIME;
+        p.onGround = false;
+        p.platform = null;
+        p.y += 2;
+    }
+
+}
+
+
+/* =========================================================
+   ANGRIFF
+========================================================= */
+
+function attack(player) {
+
+    if (!gameStarted) {
+        return;
+    }
+
+    const attacker = players[player];
+    const enemy = players[otherPlayer(player)];
+    const now = Date.now();
+
+    if (now < attacker.disabledUntil) {
+        return;
+    }
+
+    const data = characters[attacker.character];
+
+    if (now - attacker.lastAttack < data.cooldown) {
+        return;
+    }
+
+    attacker.lastAttack = now;
+
+    showAttack(player);
+
+    if (inReach(attacker, enemy, REACH_ATTACK)) {
+        damageEnemy(player, data.damage);
+    }
+
+}
+
+
+/* =========================================================
+   ATTACKEN PNG (zeigt in Blickrichtung des Spielers)
+========================================================= */
+
+function showAttack(player) {
+
+    const p = players[player];
+
+    const effect = document.getElementById(
+        player === 1 ? "attack-effect1" : "attack-effect2"
+    );
+
+    effect.src = IMG_ATTACK + characters[p.character].attack + ".png";
+
+    const direction = p.facing;
+
+    effect.style.left = (p.x + direction * ATTACK_OFFSET) + "px";
+    effect.style.top = (p.y - PLAYER_H / 2) + "px";
+
+    /* Die CSS-Animation nutzt --dir, damit die Drehung erhalten bleibt. */
+    effect.style.setProperty("--dir", direction);
+
+    effect.style.display = "block";
+
+    effect.classList.remove("attack-animation");
+    void effect.offsetWidth;
+    effect.classList.add("attack-animation");
+
+    clearTimeout(effect._hideTimer);
+
+    effect._hideTimer = setTimeout(function() {
+        effect.style.display = "none";
+    }, 300);
+
+}
+
+
+/* =========================================================
+   SCHADEN
+========================================================= */
+
+function damageEnemy(player, damage) {
+
+    if (!gameStarted) {
+        return;
+    }
+
+    const enemy = players[otherPlayer(player)];
+    const now = Date.now();
+
+    /* Schild blockt den Treffer komplett */
+    if (now < enemy.shieldUntil) {
+        enemy.shieldUntil = 0;
+        showMessage("🛡️ Schild blockt den Treffer!");
+        return;
+    }
+
+    if (now < players[player].damageUntil) {
+        damage *= DAMAGE_BOOST;
+    }
+
+    enemy.hp -= damage;
+
+    if (enemy.hp < 0) {
+        enemy.hp = 0;
+    }
+
+    enemy.lastHit = Date.now();
+    enemy.lastHeal = enemy.lastHit;
+
+    players[player].hits++;
+
+    if (players[player].hits >= 5) {
+        players[player].specialReady = true;
+    }
+
+    if (enemy.hp <= 0) {
+        endGame(player);
+    }
+
+}
+
+
+/* =========================================================
+   DASH (horizontal, in Blickrichtung oder Tastenrichtung)
+========================================================= */
+
+function dash(player) {
+
+    const p = players[player];
+    const now = Date.now();
+
+    if (now - p.lastDash < 2000) {
+        return;
+    }
+
+    if (isLocked(p)) {
+        return;
+    }
+
+    p.lastDash = now;
+
+    let dx = 0;
+
+    if (player === 1) {
+        if (keys["a"]) dx -= 1;
+        if (keys["d"]) dx += 1;
+    } else {
+        if (keys["j"]) dx -= 1;
+        if (keys["l"]) dx += 1;
+    }
+
+    if (dx === 0) {
+        dx = p.facing;
+    } else {
+        p.facing = dx;
+    }
+
+    p.x += dx * 140;
+
+    clampX(p);
+
+}
+
+
+/* =========================================================
+   SPEZIALATTACKEN
+   Wird nur verbraucht, wenn es auch wirkt.
+========================================================= */
+
+function consumeSpecial(p) {
+
+    p.specialReady = false;
+    p.hits = 0;
+
+}
+
+
+function knockback(target, from, strength, lift) {
+
+    const dir = Math.sign(target.x - from.x) || from.facing;
+
+    target.kx = dir * strength;
+    target.vy = -lift;
+    target.onGround = false;
+    target.platform = null;
+
+}
+
+
+function special(player) {
+
+    if (!gameStarted) {
+        return;
+    }
+
+    const p = players[player];
+
+    if (!p.specialReady) {
+        return;
+    }
+
+    if (Date.now() < p.disabledUntil) {
+        return;
+    }
+
+    const enemy = players[otherPlayer(player)];
+    const data = characters[p.character];
+
+
+    /* HENNING: teleportiert zum Punkt, der am weitesten vom Gegner entfernt ist */
+    if (data.special === "teleport") {
+
+        const spots = [
+            { x: SIDE_MARGIN + 10, y: level.groundTop },
+            { x: level.width - SIDE_MARGIN - 10, y: level.groundTop }
+        ];
+
+        level.platforms.forEach(function(plat) {
+            spots.push({
+                x: (plat.left + plat.right) / 2,
+                y: plat.top
+            });
+        });
+
+        let furthest = spots[0];
+        let maxDistance = 0;
+
+        spots.forEach(function(spot) {
+
+            const d = distance(enemy, spot);
+
+            if (d > maxDistance) {
+                maxDistance = d;
+                furthest = spot;
+            }
+
+        });
+
+        p.x = furthest.x;
+        p.y = furthest.y;
+        p.vy = 0;
+        p.kx = 0;
+
+        p.facing = Math.sign(enemy.x - p.x) || p.facing;
+
+        consumeSpecial(p);
+
+    }
+
+
+    /* MAX: Stoß + 5 Schaden + Knockback */
+    else if (data.special === "push") {
+
+        if (inReach(p, enemy, REACH_PUSH)) {
+
+            consumeSpecial(p);
+
+            knockback(enemy, p, 20, 9);
+
+            damageEnemy(player, 5);
+
+        }
+
+    }
+
+
+    /* TONI: Gegner läuft 2 Sekunden vor Toni weg */
+    else if (data.special === "complain") {
+
+        consumeSpecial(p);
+
+        enemy.fleeUntil = Date.now() + 2000;
+
+        knockback(enemy, p, 22, 6);
+
+    }
+
+
+    /* ELIA: 20 Schaden, danach 2 Sekunden Erholung */
+    else if (data.special === "precision") {
+
+        if (inReach(p, enemy, REACH_SPECIAL)) {
+
+            consumeSpecial(p);
+
+            p.disabledUntil = Date.now() + 2000;
+
+            damageEnemy(player, 20);
+
+        }
+
+    }
+
+
+    /* ALEX: Gegner 1 Sekunde bewegungsunfähig */
+    else if (data.special === "kick") {
+
+        if (inReach(p, enemy, REACH_SPECIAL)) {
+
+            consumeSpecial(p);
+
+            enemy.rootedUntil = Date.now() + 1000;
+
+        }
+
+    }
+
+}
+
+
+/* =========================================================
+   SPECIAL ITEMS (alle 7,5 Sekunden ein neues)
+
+   Ein Item einsammeln = hinlaufen. Es erscheint zufällig auf
+   dem Boden oder einem der Blöcke.
+========================================================= */
+
+const ITEM_TYPES = [
+    { id: "heal",   icon: "❤️", text: "+" + HEAL_ITEM + " HP" },
+    { id: "speed",  icon: "⚡", text: "SCHNELLER" },
+    { id: "damage", icon: "💥", text: "MEHR SCHADEN" },
+    { id: "shield", icon: "🛡️", text: "SCHILD" },
+    { id: "charge", icon: "⭐", text: "SPEZIAL BEREIT" }
+];
+
+
+let messageTimer = null;
+
+function showMessage(text) {
+
+    const el = document.getElementById("message");
+
+    el.textContent = text;
+
+    clearTimeout(messageTimer);
+
+    messageTimer = setTimeout(function() {
+        el.textContent = "";
+    }, 1800);
+
+}
+
+
+function clearItems() {
+
+    items.forEach(function(item) {
+        item.el.remove();
+    });
+
+    items = [];
+
+}
+
+
+function spawnItem() {
+
+    if (items.length >= MAX_ITEMS) {
+        return;
+    }
+
+    /* Mögliche Flächen: Boden + alle Blöcke */
+    const minX = SIDE_MARGIN + 40;
+    const maxX = level.width - SIDE_MARGIN - 40;
+
+    const surfaces = [
+        {
+            x: minX + Math.random() * (maxX - minX),
+            y: level.groundTop
+        }
+    ];
+
+    level.platforms.forEach(function(plat) {
+        surfaces.push({
+            x: plat.left + 30 + Math.random() * (plat.right - plat.left - 60),
+            y: plat.top
+        });
+    });
+
+    const surface = surfaces[Math.floor(Math.random() * surfaces.length)];
+    const type = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
+
+    const x = surface.x;
+    const y = surface.y - ITEM_LIFT;
+
+    const el = document.createElement("div");
+    const icon = document.createElement("span");
+
+    el.className = "item";
+    icon.textContent = type.icon;
+
+    el.appendChild(icon);
+
+    el.style.left = x + "px";
+    el.style.top = y + "px";
+
+    document.getElementById("items").appendChild(el);
+
+    items.push({
+        type: type,
+        x: x,
+        y: y,
+        el: el,
+        spawnedAt: Date.now()
+    });
+
+}
+
+
+function collectItem(player, type) {
+
+    const p = players[player];
+    const now = Date.now();
+
+    if (type.id === "heal") {
+        p.hp = Math.min(p.maxHp, p.hp + HEAL_ITEM);
+    }
+
+    else if (type.id === "speed") {
+        p.speedUntil = now + BOOST_TIME;
+    }
+
+    else if (type.id === "damage") {
+        p.damageUntil = now + BOOST_TIME;
+    }
+
+    else if (type.id === "shield") {
+        p.shieldUntil = now + SHIELD_TIME;
+    }
+
+    else if (type.id === "charge") {
+        p.hits = 5;
+        p.specialReady = true;
+    }
+
+    showMessage(type.icon + " Spieler " + player + ": " + type.text);
+
+}
+
+
+function updateItems() {
+
+    const now = Date.now();
+
+    if (now - lastItemSpawn >= ITEM_SPAWN_INTERVAL) {
+        lastItemSpawn = now;
+        spawnItem();
+    }
+
+    items = items.filter(function(item) {
+
+        const age = now - item.spawnedAt;
+
+        if (age >= ITEM_LIFETIME) {
+            item.el.remove();
+            return false;
+        }
+
+        /* Blinkt in den letzten 3 Sekunden */
+        item.el.classList.toggle("expiring", age > ITEM_LIFETIME - 3000);
+
+        for (const n of [1, 2]) {
+
+            const p = players[n];
+
+            const d = Math.hypot(
+                p.x - item.x,
+                (p.y - PLAYER_H / 2) - item.y
+            );
+
+            if (d <= ITEM_PICKUP_RADIUS) {
+                collectItem(n, item.type);
+                item.el.remove();
+                return false;
+            }
+
+        }
+
+        return true;
+
+    });
+
+}
+
+
+function effectsText(p) {
+
+    const now = Date.now();
+    const parts = [];
+
+    if (now < p.speedUntil) {
+        parts.push("⚡ " + Math.ceil((p.speedUntil - now) / 1000) + "s");
+    }
+
+    if (now < p.damageUntil) {
+        parts.push("💥 " + Math.ceil((p.damageUntil - now) / 1000) + "s");
+    }
+
+    if (now < p.shieldUntil) {
+        parts.push("🛡️ " + Math.ceil((p.shieldUntil - now) / 1000) + "s");
+    }
+
+    return parts.join("   ");
+
+}
+
+
+/* =========================================================
+   HEILUNG
+========================================================= */
+
+function healPlayers() {
+
+    const now = Date.now();
+
+    [1, 2].forEach(function(player) {
+
+        const p = players[player];
+
+        if (p.hp <= 0 || p.hp >= p.maxHp) {
+            return;
+        }
+
+        if (now - p.lastHit < HEAL_DELAY) {
+            return;
+        }
+
+        if (now - p.lastHeal >= HEAL_INTERVAL) {
+
+            p.hp = Math.min(p.maxHp, p.hp + HEAL_AMOUNT);
+
+            p.lastHeal = now;
+
+        }
+
+    });
+
+}
+
+
+/* =========================================================
+   POSITIONEN + BLICKRICHTUNG
+========================================================= */
+
+function updatePositions() {
+
+    [1, 2].forEach(function(player) {
+
+        const p = players[player];
+
+        const el = document.getElementById("player" + player);
+
+        el.style.left = p.x + "px";
+        el.style.top = p.y + "px";
+
+        el.classList.toggle("shielded", Date.now() < p.shieldUntil);
+
+        /*
+         * Bilder werden als nach RECHTS blickend angenommen.
+         * Schaut dein PNG nach links, tausche 1 und -1.
+         */
+        document.getElementById("player" + player + "-img")
+            .style.transform = p.facing === -1 ? "scaleX(-1)" : "scaleX(1)";
+
+    });
+
+}
+
+
+/* =========================================================
+   HUD
+========================================================= */
+
+function updateHUD() {
+
+    const p1 = players[1];
+    const p2 = players[2];
+
+    document.getElementById("hp1").style.width =
+        (p1.hp / p1.maxHp * 100) + "%";
+
+    document.getElementById("hp2").style.width =
+        (p2.hp / p2.maxHp * 100) + "%";
+
+    document.getElementById("special1").textContent =
+        p1.specialReady
+            ? "SPEZIAL BEREIT! [Q]"
+            : `SPEZIAL: ${p1.hits} / 5`;
+
+    document.getElementById("special2").textContent =
+        p2.specialReady
+            ? "SPEZIAL BEREIT! [U]"
+            : `SPEZIAL: ${p2.hits} / 5`;
+
+    document.getElementById("effects1").textContent = effectsText(p1);
+    document.getElementById("effects2").textContent = effectsText(p2);
+
+}
+
+
+/* =========================================================
+   TIMER
+========================================================= */
+
+function updateTimer() {
+
+    const seconds = Math.floor((Date.now() - startTime) / 1000);
+
+    const minutes = Math.floor(seconds / 60);
+    const remaining = seconds % 60;
+
+    document.getElementById("timer").textContent =
+        `${minutes}:${remaining.toString().padStart(2, "0")}`;
+
+}
+
+
+/* =========================================================
+   GAME OVER
+========================================================= */
+
+function endGame(winner) {
+
+    gameStarted = false;
+
+    document.getElementById("game").classList.add("hidden");
+    document.getElementById("game-over").classList.remove("hidden");
+
+    document.getElementById("winner").textContent =
+        `SPIELER ${winner} GEWINNT!`;
+
+}
+
+
+/* =========================================================
+   GAME LOOP (Delta-Time)
+========================================================= */
+
+function gameLoop(timestamp) {
+
+    if (!gameStarted) {
+        return;
+    }
+
+    if (!lastFrameTime) {
+        lastFrameTime = timestamp;
+    }
+
+    const dt = Math.min((timestamp - lastFrameTime) / (1000 / 60), 3);
+
+    lastFrameTime = timestamp;
+
+
+    move(1, dt);
+    move(2, dt);
+
+    applyPhysics(players[1], dt);
+    applyPhysics(players[2], dt);
+
+    healPlayers();
+    updateItems();
+
+    updatePositions();
+    updateHUD();
+    updateTimer();
+
+    requestAnimationFrame(gameLoop);
+
+}
+
+
+/* =========================================================
+   START
+========================================================= */
+
+createCharacterButtons();
+
+</script>
+
+</body>
+</html>
