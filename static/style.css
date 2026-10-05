@@ -709,3 +709,35 @@ button:active { transform: scale(0.97); }
     color: #ffd34d;
     margin-top: -15px;
 }
+
+
+/* =========================================================
+   LEBENSLEISTE: Schadens-Schweif + Farbe nach HP
+========================================================= */
+.health-bar { position: relative; }
+
+.health { position: absolute; left: 0; top: 0; }
+
+.health.ghost {
+    background: #d93b3b;
+    transition: none;
+}
+
+.health.mid { background: linear-gradient(to bottom, #ffe066, #e0a800); }
+.health.low { background: linear-gradient(to bottom, #ff6a5a, #c4281c); }
+
+
+/* =========================================================
+   GAME OVER: Statistik + Buttons
+========================================================= */
+#final-score {
+    white-space: pre-line;
+    text-align: center;
+    line-height: 1.6;
+    font-size: 22px;
+}
+
+#game-over .buttons {
+    display: flex;
+    gap: 20px;
+}
