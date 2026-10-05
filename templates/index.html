@@ -11,9 +11,6 @@
 
 <body>
 
-<!-- =========================================================
-     CHARAKTERAUSWAHL
-========================================================= -->
 
 <div id="character-select">
 
@@ -23,7 +20,7 @@
 
     <div class="players">
 
-        <!-- SPIELER 1 -->
+
         <div class="player-select">
 
             <h2>SPIELER 1</h2>
@@ -51,7 +48,6 @@
         </div>
 
 
-        <!-- SPIELER 2 -->
         <div class="player-select">
 
             <h2>SPIELER 2</h2>
@@ -83,27 +79,23 @@
 </div>
 
 
-<!-- =========================================================
-     SPIEL
-========================================================= -->
-
 <div id="game" class="hidden">
 
     <div id="arena">
 
         <div id="background"></div>
 
-        <!-- Boden (mit Grube in der Mitte) -->
+
         <div id="ground-left" class="ground-piece"></div>
         <div id="ground-right" class="ground-piece"></div>
 
-        <!-- Blöcke, Sprungfedern, Teleporter -->
+
         <div id="platforms"></div>
 
-        <!-- Items, Bomben, Fallen -->
+
         <div id="items"></div>
 
-        <!-- HUD -->
+
         <div id="hud">
 
             <div class="health-container">
@@ -151,7 +143,7 @@
             <img id="player2-img" alt="Spieler 2">
         </div>
 
-        <!-- Partikel, Schadenszahlen, Projektile -->
+
         <div id="fx"></div>
 
         <div id="message"></div>
@@ -165,10 +157,6 @@
 
 </div>
 
-
-<!-- =========================================================
-     GAME OVER
-========================================================= -->
 
 <div id="game-over" class="hidden">
 
@@ -186,15 +174,11 @@
 
 <script>
 
-/* =========================================================
-   KONSTANTEN
-========================================================= */
 
-/* Spielergröße (muss zu .fighter in style.css passen) */
 const PLAYER_W = 180;
 const PLAYER_H = 210;
 
-/* Physik (Einheiten: Pixel pro 60-FPS-Frame) */
+
 const GRAVITY = 0.65;
 const JUMP_SPEED = -22;
 const MAX_FALL = 30;
@@ -202,12 +186,12 @@ const FOOT_HALF = 45;
 const SIDE_MARGIN = 70;
 const DROP_TIME = 200;
 
-/* Karte */
+
 const GROUND_H = 110;
 const HUD_SAFE = 170;
-const PIT_WIDTH = 300;           /* Grube in der Mitte: Ring-Out! */
-const RINGOUT_DEPTH = 260;       /* so tief unter dem Boden = K.O. */
-const SPRING_SPEED = -27;        /* Sprungfeder-Kraft */
+const PIT_WIDTH = 300;
+const RINGOUT_DEPTH = 260;
+const SPRING_SPEED = -27;
 
 const BLOCK_WIDTH = 300;
 const BLOCK_LAYOUT = [
@@ -216,40 +200,40 @@ const BLOCK_LAYOUT = [
     { name: "BlockC", cx: 0.80, height: 320 }
 ];
 
-/* Reichweiten (Mittelpunkt zu Mittelpunkt) */
+
 const REACH_ATTACK = 210;
 const REACH_PUSH = 230;
 const REACH_SPECIAL = 210;
 const ATTACK_OFFSET = 75;
 const PROJECTILE_RADIUS = 85;
 
-/* Kampf */
-const HIT_KNOCKBACK = 9;         /* Grund-Rückstoß pro Treffer */
+
+const HIT_KNOCKBACK = 9;
 const KNOCKBACK_PER_MISSING_HP = 1.2;
 const DASH_COOLDOWN = 2000;
-const DASH_SPEED = 26;           /* Pixel pro Frame -> Dash ca. 310 px lang */
-const DASH_TIME = 200;           /* ms; währenddessen unverwundbar */
-const SPEED_SCALE = 1.45;        /* Laufgeschwindigkeit aller Charaktere */
-const COYOTE_TIME = 110;         /* ms: Sprung noch kurz nach der Kante möglich */
-const JUMP_BUFFER = 130;         /* ms: Sprung kurz vor der Landung vorgemerkt */
-const BODY_PUSH_DIST = 80;       /* Spieler schieben sich auseinander */
+const DASH_SPEED = 26;
+const DASH_TIME = 200;
+const SPEED_SCALE = 1.45;
+const COYOTE_TIME = 110;
+const JUMP_BUFFER = 130;
+const BODY_PUSH_DIST = 80;
 const BLOCK_TIME = 450;
-const PARRY_WINDOW = 180;        /* so kurz nach Tastendruck = Parade */
+const PARRY_WINDOW = 180;
 const BLOCK_COOLDOWN = 1300;
-const BLOCK_REDUCTION = 0.3;     /* Block lässt 30 % Schaden durch */
+const BLOCK_REDUCTION = 0.3;
 const PARRY_STUN = 1000;
 const COMBO_WINDOW = 2500;
-const RAGE_THRESHOLD = 0.3;      /* unter 30 % HP: Wut */
+const RAGE_THRESHOLD = 0.3;
 const RAGE_DAMAGE = 1.25;
 
-/* Runden */
-const ROUNDS_TO_WIN = 2;         /* Best of 3 */
-const SUDDEN_DEATH_TIME = 90000; /* nach 90 s */
+
+const ROUNDS_TO_WIN = 2;
+const SUDDEN_DEATH_TIME = 90000;
 const SUDDEN_TICK = 500;
 const SUDDEN_DAMAGE = 2;
 const SLOWMO_SCALE = 0.25;
 
-/* Items */
+
 const ITEM_SPAWN_INTERVAL = 7500;
 const ITEM_LIFETIME = 15000;
 const MAX_ITEMS = 3;
@@ -280,15 +264,6 @@ const IMG_ATTACK = "{{ url_for('static', filename='attacken/') }}";
 const IMG_LEVEL = "{{ url_for('static', filename='BBBB/') }}";
 const IMG_BG = "{{ url_for('static', filename='Hintergrund/hintergrund.png') }}";
 
-
-/* =========================================================
-   CHARAKTERDATEN
-
-   doubleJump : Doppelsprung
-   superarmor : Treffer werfen ihn nicht zurück, Parade betäubt ihn nicht
-   critChance : Chance auf doppelten Schaden
-   ranged     : Angriff ist ein Projektil
-========================================================= */
 
 const characters = {
 
@@ -323,10 +298,6 @@ const characters = {
 
 };
 
-
-/* =========================================================
-   SPIELER
-========================================================= */
 
 function createPlayer() {
 
@@ -386,10 +357,6 @@ function createPlayer() {
 let players = { 1: createPlayer(), 2: createPlayer() };
 
 
-/* =========================================================
-   ZUSTAND
-========================================================= */
-
 const level = {
     width: 0,
     groundTop: 0,
@@ -407,8 +374,8 @@ let selected2 = null;
 let ready1 = false;
 let ready2 = false;
 
-let gameStarted = false;    /* Spiel läuft (alle Runden) */
-let fighting = false;       /* Runde läuft gerade (Eingaben aktiv) */
+let gameStarted = false;
+let fighting = false;
 let starting = false;
 
 let wins = { 1: 0, 2: 0 };
@@ -440,10 +407,6 @@ let shakeStrength = 0;
 
 const $ = function(id) { return document.getElementById(id); };
 
-
-/* =========================================================
-   SOUND (synthetisch, keine Dateien nötig)
-========================================================= */
 
 let audioCtx = null;
 let muted = false;
@@ -536,10 +499,6 @@ function sfx(name) {
 
 }
 
-
-/* =========================================================
-   EFFEKTE: Partikel, Schadenszahlen, Shake, Hitstop
-========================================================= */
 
 function burst(x, y, count, color, power, size) {
 
@@ -671,10 +630,6 @@ function hideBanner() {
 }
 
 
-/* =========================================================
-   TASTEN
-========================================================= */
-
 const keys = {};
 
 document.addEventListener("keydown", function(event) {
@@ -724,7 +679,7 @@ document.addEventListener("keyup", function(event) {
 
     keys[key] = false;
 
-    /* Taste früh loslassen = kleinerer Sprung */
+
     if (gameStarted && fighting) {
         if (key === "w") cutJump(1);
         if (key === "i") cutJump(2);
@@ -742,10 +697,6 @@ document.addEventListener("visibilitychange", function() {
     if (document.hidden) releaseAllKeys();
 });
 
-
-/* =========================================================
-   AUSWAHL
-========================================================= */
 
 function createCharacterButtons() {
 
@@ -819,10 +770,6 @@ function readyPlayer(player) {
 }
 
 
-/* =========================================================
-   LEVEL
-========================================================= */
-
 function loadImage(src) {
 
     return new Promise(function(resolve) {
@@ -864,7 +811,6 @@ function buildLevel() {
     level.groundTop = h - GROUND_H;
 
 
-    /* Boden mit Grube */
     const pitW = Math.min(PIT_WIDTH, w * 0.2);
     const pitL = w / 2 - pitW / 2;
     const pitR = w / 2 + pitW / 2;
@@ -889,7 +835,6 @@ function buildLevel() {
     });
 
 
-    /* Blöcke */
     const highest = Math.max.apply(null, BLOCK_LAYOUT.map(function(b) { return b.height; }));
     const available = level.groundTop - HUD_SAFE - PLAYER_H;
     const factor = Math.max(0.4, Math.min(1, available / highest));
@@ -924,7 +869,6 @@ function buildLevel() {
     });
 
 
-    /* Sprungfedern auf dem Boden */
     level.springs = [0.28, 0.72].map(function(frac) {
 
         const x = w * frac;
@@ -942,7 +886,6 @@ function buildLevel() {
     });
 
 
-    /* Teleporter: außen auf Block A und Block C */
     const pa = level.platforms[0];
     const pc = level.platforms[2];
 
@@ -1014,10 +957,6 @@ window.addEventListener("resize", function() {
 
 });
 
-
-/* =========================================================
-   MATCH STARTEN / RUNDEN
-========================================================= */
 
 async function startGame() {
 
@@ -1194,10 +1133,6 @@ function endGame(winner) {
 }
 
 
-/* =========================================================
-   LOOP-START, STATISTIK, REVANCHE
-========================================================= */
-
 function startLoop() {
 
     if (!loopRunning) {
@@ -1211,7 +1146,7 @@ function resetStats() {
     stats = { 1: newStats(), 2: newStats() };
 }
 
-/* Gleiche Charaktere, neues Match */
+
 function rematch() {
 
     $("game-over").classList.add("hidden");
@@ -1234,10 +1169,6 @@ function rematch() {
 }
 
 
-/* =========================================================
-   HILFSFUNKTIONEN
-========================================================= */
-
 function clampX(p) {
 
     const min = SIDE_MARGIN;
@@ -1256,7 +1187,7 @@ function otherPlayer(player) {
     return player === 1 ? 2 : 1;
 }
 
-/* Gegner in Reichweite UND vor dem Spieler (Blickrichtung) */
+
 function inReach(p, enemy, range) {
 
     if (distance(p, enemy) > range) return false;
@@ -1279,7 +1210,7 @@ function isLocked(p) {
 
 }
 
-/* Würde der Spieler bei x noch auf seiner Fläche stehen? */
+
 function supportedAt(p, x) {
 
     if (p.platform) {
@@ -1302,10 +1233,6 @@ function knockback(target, from, strength, lift) {
 }
 
 
-/* =========================================================
-   BEWEGUNG (links/rechts)
-========================================================= */
-
 function move(player, dt) {
 
     const p = players[player];
@@ -1313,7 +1240,7 @@ function move(player, dt) {
 
     if (now < p.disabledUntil || now < p.blockUntil) return;
 
-    /* Dash: schneller Zug in eine Richtung (Nachbilder-Spur) */
+
     if (now < p.dashUntil) {
 
         p.x += p.dashDir * DASH_SPEED * dt;
@@ -1331,7 +1258,6 @@ function move(player, dt) {
     if (now < p.speedUntil) speed *= SPEED_BOOST;
 
 
-    /* Toni-Spezial: läuft automatisch weg (bleibt am Rand stehen) */
     if (now < p.fleeUntil) {
 
         const enemy = players[otherPlayer(player)];
@@ -1362,7 +1288,7 @@ function move(player, dt) {
         if (keys["l"]) dx += 1;
     }
 
-    /* Verwirrung: Steuerung umgekehrt */
+
     if (now < p.reverseUntil) dx = -dx;
 
     if (dx !== 0) {
@@ -1375,10 +1301,6 @@ function move(player, dt) {
 }
 
 
-/* =========================================================
-   PHYSIK
-========================================================= */
-
 function applyPhysics(p, dt) {
 
     const now = Date.now();
@@ -1386,7 +1308,6 @@ function applyPhysics(p, dt) {
     const wasAir = !p.onGround;
 
 
-    /* Knockback */
     p.x += p.kx * dt;
     p.kx *= Math.pow(0.9, dt);
 
@@ -1395,7 +1316,6 @@ function applyPhysics(p, dt) {
     clampX(p);
 
 
-    /* Schwerkraft (während des Dashs schwebt man) */
     if (now < p.dashUntil) {
         p.vy = 0;
     } else {
@@ -1410,7 +1330,6 @@ function applyPhysics(p, dt) {
     p.platform = null;
 
 
-    /* Blöcke: nur von oben landen */
     if (p.vy >= 0 && now >= p.dropUntil) {
 
         let best = null;
@@ -1439,7 +1358,6 @@ function applyPhysics(p, dt) {
     }
 
 
-    /* Boden: nur dort, wo er nicht von der Grube unterbrochen wird */
     if (
         p.vy >= 0 &&
         prevY <= level.groundTop + 1 &&
@@ -1463,7 +1381,7 @@ function applyPhysics(p, dt) {
             dust(p.x, p.y);
         }
 
-        /* vorgemerkter Sprung wird bei der Landung ausgeführt */
+
         if (wasAir && now < p.jumpBufferUntil && fighting && !isLocked(p)) {
             p.jumpBufferUntil = 0;
             doJump(p);
@@ -1476,7 +1394,6 @@ function applyPhysics(p, dt) {
     }
 
 
-    /* Decke */
     const ceiling = PLAYER_H + 10;
 
     if (p.y < ceiling) {
@@ -1506,7 +1423,7 @@ function jump(player) {
 
     if (!fighting || isLocked(p)) return;
 
-    /* Coyote-Time: kurz nach dem Verlassen einer Kante geht der Sprung noch */
+
     const groundJump =
         p.onGround || (p.vy >= 0 && now - p.lastGrounded <= COYOTE_TIME);
 
@@ -1525,14 +1442,14 @@ function jump(player) {
 
     } else {
 
-        /* Sprung kurz vor der Landung vormerken */
+
         p.jumpBufferUntil = now + JUMP_BUFFER;
 
     }
 
 }
 
-/* Taste früh loslassen = kleinerer Sprung */
+
 function cutJump(player) {
 
     const p = players[player];
@@ -1545,7 +1462,7 @@ function cutJump(player) {
 
 }
 
-/* Spieler schieben sich weich auseinander (kein Ineinanderstehen) */
+
 function separatePlayers(dt) {
 
     const a = players[1];
@@ -1588,10 +1505,6 @@ function dropDown(player) {
 
 }
 
-
-/* =========================================================
-   ANGRIFF
-========================================================= */
 
 function attack(player) {
 
@@ -1652,10 +1565,6 @@ function showAttack(player) {
 
 }
 
-
-/* =========================================================
-   PROJEKTILE (Fernangriff, z. B. Toni)
-========================================================= */
 
 function shootProjectile(player) {
 
@@ -1748,10 +1657,6 @@ function updateProjectiles(dt) {
 }
 
 
-/* =========================================================
-   BLOCKEN / PARIEREN
-========================================================= */
-
 function block(player) {
 
     const p = players[player];
@@ -1765,16 +1670,6 @@ function block(player) {
 
 }
 
-
-/* =========================================================
-   SCHADEN
-
-   opts.canCrit   : Krit-Chance des Charakters gilt
-   opts.knockback : Rückstoß-Stärke (Standard HIT_KNOCKBACK)
-   opts.lift      : Hochschleudern
-   opts.heavy     : stärkeres Feedback
-   opts.from      : Ursprung des Rückstoßes (Standard: Angreifer)
-========================================================= */
 
 function damageEnemy(player, damage, opts) {
 
@@ -1792,7 +1687,6 @@ function damageEnemy(player, damage, opts) {
     let blocked = false;
 
 
-    /* Dash = kurz unverwundbar */
     if (now < enemy.dashUntil) {
 
         floatText(enemy.x, headY, "AUSGEWICHEN!", "info");
@@ -1804,7 +1698,6 @@ function damageEnemy(player, damage, opts) {
     }
 
 
-    /* Parade / Block */
     if (now < enemy.blockUntil) {
 
         if (now - enemy.blockStart <= PARRY_WINDOW) {
@@ -1833,7 +1726,6 @@ function damageEnemy(player, damage, opts) {
     }
 
 
-    /* Schild-Item */
     if (now < enemy.shieldUntil) {
 
         enemy.shieldUntil = 0;
@@ -1874,7 +1766,6 @@ function damageEnemy(player, damage, opts) {
     enemy.flashUntil = now + 160;
 
 
-    /* Feedback */
     floatText(
         enemy.x,
         headY,
@@ -1899,7 +1790,7 @@ function damageEnemy(player, damage, opts) {
 
     if (!blocked) {
 
-        /* Combo */
+
         if (now - attacker.lastComboHit > COMBO_WINDOW) attacker.combo = 0;
 
         attacker.combo++;
@@ -1914,7 +1805,7 @@ function damageEnemy(player, damage, opts) {
             floatText(attacker.x, attacker.y - PLAYER_H - 35, "COMBO x" + attacker.combo, "combo");
         }
 
-        /* Spezial lädt ab 3 Treffern in Folge doppelt so schnell */
+
         attacker.hits += attacker.combo >= 3 ? 2 : 1;
 
         if (attacker.hits >= 5) {
@@ -1922,7 +1813,7 @@ function damageEnemy(player, damage, opts) {
             attacker.specialReady = true;
         }
 
-        /* Rückstoß: je weniger HP, desto weiter (Max hat Superarmor) */
+
         const kb = opts.knockback === undefined ? HIT_KNOCKBACK : opts.knockback;
 
         if (kb > 0 && !(characters[enemy.character].superarmor && !opts.heavy)) {
@@ -1948,7 +1839,7 @@ function damageEnemy(player, damage, opts) {
 
 }
 
-/* Schaden ohne Angreifer (Gift, Selbstschaden, Sudden Death) */
+
 function applyDamage(n, amount, source, cls) {
 
     if (!fighting) return;
@@ -1969,10 +1860,6 @@ function applyDamage(n, amount, source, cls) {
 
 }
 
-
-/* =========================================================
-   DASH
-========================================================= */
 
 function dash(player) {
 
@@ -2009,10 +1896,6 @@ function dash(player) {
 }
 
 
-/* =========================================================
-   SPEZIALATTACKEN
-========================================================= */
-
 function consumeSpecial(p) {
     p.specialReady = false;
     p.hits = 0;
@@ -2032,7 +1915,6 @@ function special(player) {
     const data = characters[p.character];
 
 
-    /* HENNING: teleportiert zum Punkt, der am weitesten vom Gegner entfernt ist */
     if (data.special === "teleport") {
 
         const spots = [
@@ -2074,7 +1956,6 @@ function special(player) {
     }
 
 
-    /* MAX: Stoß + 5 Schaden + großer Rückstoß */
     else if (data.special === "push") {
 
         if (inReach(p, enemy, REACH_PUSH)) {
@@ -2089,7 +1970,6 @@ function special(player) {
     }
 
 
-    /* TONI: Gegner läuft 2 Sekunden vor Toni weg */
     else if (data.special === "complain") {
 
         consumeSpecial(p);
@@ -2104,7 +1984,6 @@ function special(player) {
     }
 
 
-    /* ELIA: 20 Schaden, danach 2 Sekunden Erholung */
     else if (data.special === "precision") {
 
         if (inReach(p, enemy, REACH_SPECIAL)) {
@@ -2121,7 +2000,6 @@ function special(player) {
     }
 
 
-    /* ALEX: Gegner 1 Sekunde bewegungsunfähig */
     else if (data.special === "kick") {
 
         if (inReach(p, enemy, REACH_SPECIAL)) {
@@ -2141,10 +2019,6 @@ function special(player) {
 
 }
 
-
-/* =========================================================
-   HEILUNG
-========================================================= */
 
 function healPlayers() {
 
@@ -2169,10 +2043,6 @@ function healPlayers() {
 
 }
 
-
-/* =========================================================
-   SPECIAL ITEMS
-========================================================= */
 
 const ITEM_TYPES = [
     { id: "heal",    icon: "❤️", text: "+" + HEAL_ITEM + " HP" },
@@ -2199,7 +2069,7 @@ function spawnItem() {
 
     if (items.length >= MAX_ITEMS) return;
 
-    /* Flächen: Boden (ohne Grube) + alle Blöcke */
+
     const surfaces = [{ x: randomGroundX(), y: level.groundTop }];
 
     level.platforms.forEach(function(plat) {
@@ -2351,10 +2221,6 @@ function updateItems() {
 }
 
 
-/* =========================================================
-   BOMBEN UND FALLEN
-========================================================= */
-
 function clearHazards() {
 
     hazards.forEach(function(h) { h.el.remove(); });
@@ -2406,7 +2272,7 @@ function explodeBomb(h) {
 
     const from = { x: h.x, facing: 1 };
 
-    /* Gegner des Bomben-Legers: voller Schaden */
+
     const enemyNum = otherPlayer(h.owner);
     const enemy = players[enemyNum];
 
@@ -2414,7 +2280,7 @@ function explodeBomb(h) {
         damageEnemy(h.owner, BOMB_DAMAGE, { knockback: 16, lift: 12, heavy: true, from: from });
     }
 
-    /* Der Leger selbst: halber Schaden (Vorsicht!) */
+
     const owner = players[h.owner];
 
     if (fighting && Math.hypot(owner.x - cx, (owner.y - PLAYER_H / 2) - cy) <= BOMB_RADIUS) {
@@ -2487,10 +2353,6 @@ function updateHazards() {
 
 }
 
-
-/* =========================================================
-   GIFT, SUDDEN DEATH, RING-OUT, KARTENOBJEKTE
-========================================================= */
 
 function updatePoison() {
 
@@ -2568,7 +2430,7 @@ function updateMapObjects() {
 
         const p = players[n];
 
-        /* Sprungfedern */
+
         level.springs.forEach(function(s) {
 
             if (
@@ -2592,7 +2454,7 @@ function updateMapObjects() {
 
         });
 
-        /* Teleporter */
+
         level.portals.forEach(function(portal) {
 
             if (
@@ -2623,10 +2485,6 @@ function updateMapObjects() {
 }
 
 
-/* =========================================================
-   DARSTELLUNG
-========================================================= */
-
 function updatePositions() {
 
     const now = Date.now();
@@ -2647,7 +2505,7 @@ function updatePositions() {
         el.classList.toggle("hit-flash", now < p.flashUntil);
         el.classList.toggle("stunned", now < p.disabledUntil);
 
-        /* Bilder werden als nach RECHTS blickend angenommen. */
+
         $("player" + player + "-img").style.transform =
             p.facing === -1 ? "scaleX(-1)" : "scaleX(1)";
 
@@ -2698,7 +2556,7 @@ function updateHUD() {
         $("hp" + n).classList.toggle("low", pct <= 30);
         $("hp" + n).classList.toggle("mid", pct > 30 && pct <= 60);
 
-        /* roter "Schadens-Schweif" hinter der Lebensleiste */
+
         if (ghostPct[n] < pct) {
             ghostPct[n] = pct;
         } else if (now - p.lastHit > 450) {
@@ -2741,10 +2599,6 @@ function updateTimer() {
 
 }
 
-
-/* =========================================================
-   GAME LOOP (Delta-Time, Hitstop, Zeitlupe)
-========================================================= */
 
 function gameLoop(timestamp) {
 
@@ -2802,10 +2656,6 @@ function gameLoop(timestamp) {
 
 }
 
-
-/* =========================================================
-   START
-========================================================= */
 
 createCharacterButtons();
 
