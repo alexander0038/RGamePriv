@@ -170,18 +170,6 @@ button:active { transform: scale(0.97); }
 /* =========================================================
    BODEN + BLÖCKE (Höhe/Position setzt das JavaScript)
 ========================================================= */
-#ground {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    width: 100%;
-    background-repeat: no-repeat;
-    background-position: center top;
-    background-size: 100% 100%;
-    z-index: 2;
-    pointer-events: none;
-}
-
 #platforms {
     position: absolute;
     inset: 0;
@@ -262,8 +250,8 @@ button:active { transform: scale(0.97); }
 ========================================================= */
 .fighter {
     position: absolute;
-    width: 210px;
-    height: 240px;
+    width: 180px;
+    height: 210px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -429,4 +417,295 @@ button:active { transform: scale(0.97); }
         drop-shadow(0 0 10px #4df)
         drop-shadow(0 0 22px #4df)
         drop-shadow(0 7px 5px rgba(0,0,0,0.5));
+}
+
+
+/* =========================================================
+   BODEN (zwei Teile, dazwischen die Grube)
+========================================================= */
+.ground-piece {
+    position: absolute;
+    bottom: 0;
+    background-repeat: no-repeat;
+    z-index: 2;
+    pointer-events: none;
+}
+
+
+/* =========================================================
+   MENÜ-HINWEIS
+========================================================= */
+.hint {
+    margin: -20px 0 25px;
+    color: #aaa;
+    font-size: 15px;
+    letter-spacing: 1px;
+}
+
+
+/* =========================================================
+   HUD-ERWEITERUNGEN
+========================================================= */
+.wins {
+    margin-left: 10px;
+    font-size: 18px;
+    letter-spacing: 3px;
+    color: #ffd34d;
+}
+
+.cooldowns {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.cd { flex: 1; max-width: 110px; }
+
+.cd span {
+    display: block;
+    font-size: 10px;
+    font-weight: bold;
+    color: #ddd;
+    text-shadow: 1px 1px 3px black;
+}
+
+.cd-bar {
+    height: 6px;
+    background: rgba(0,0,0,0.55);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.cd-bar i {
+    display: block;
+    height: 100%;
+    width: 100%;
+    background: #ffb02e;
+}
+
+.cd-bar i.ready { background: #39ef68; }
+
+#timer.sudden {
+    color: #ff4d4d;
+    animation: suddenPulse 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes suddenPulse {
+    from { transform: scale(1); }
+    to   { transform: scale(1.18); }
+}
+
+
+/* =========================================================
+   EFFEKT-EBENE (Partikel, Zahlen, Projektile)
+========================================================= */
+#fx {
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    pointer-events: none;
+}
+
+.particle {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.float-text {
+    position: absolute;
+    font-weight: bold;
+    font-size: 28px;
+    white-space: nowrap;
+    text-shadow: 2px 2px 5px black, 0 0 8px black;
+    pointer-events: none;
+}
+
+.float-text.dmg    { color: #ff5a5a; }
+.float-text.crit   { color: #ffd34d; font-size: 44px; }
+.float-text.parry  { color: #6fe7ff; font-size: 34px; }
+.float-text.combo  { color: #ff9a2e; font-size: 30px; }
+.float-text.heal   { color: #5cff8a; }
+.float-text.poison { color: #9be14a; }
+.float-text.sd     { color: #ff8888; font-size: 20px; }
+.float-text.info   { color: #ffffff; font-size: 24px; }
+
+.projectile {
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+    transform: translate(-50%, -50%) scaleX(var(--dir, 1));
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+    pointer-events: none;
+}
+
+.explosion {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,240,150,0.95), rgba(255,120,30,0.7) 55%, rgba(255,60,0,0) 75%);
+    pointer-events: none;
+}
+
+
+/* =========================================================
+   BOMBEN UND FALLEN
+========================================================= */
+.hazard {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    font-size: 46px;
+    line-height: 1;
+    user-select: none;
+    pointer-events: none;
+}
+
+.hazard.bomb { animation: bombBlink 0.5s steps(2, start) infinite; }
+.hazard.bomb.fast { animation-duration: 0.15s; }
+.hazard.trap { opacity: 0.8; filter: drop-shadow(0 0 8px #ff4d4d); }
+
+@keyframes bombBlink {
+    to { filter: brightness(2.2) drop-shadow(0 0 10px #ff4d4d); }
+}
+
+
+/* =========================================================
+   SPRUNGFEDERN UND TELEPORTER
+========================================================= */
+.spring {
+    position: absolute;
+    width: 90px;
+    height: 24px;
+    border-radius: 8px 8px 4px 4px;
+    background: repeating-linear-gradient(
+        to bottom,
+        #ff9d1c 0 5px,
+        #b86400 5px 8px
+    );
+    border-top: 5px solid #ffd27a;
+    box-shadow: 0 0 12px rgba(255,170,40,0.6);
+    transform-origin: bottom center;
+    pointer-events: none;
+}
+
+.spring-active { animation: springSquash 0.25s ease-out; }
+
+@keyframes springSquash {
+    0%   { transform: scaleY(1); }
+    35%  { transform: scaleY(0.45); }
+    100% { transform: scaleY(1); }
+}
+
+.portal {
+    position: absolute;
+    width: 60px;
+    height: 110px;
+    border-radius: 50%;
+    animation: portalPulse 1.2s ease-in-out infinite alternate;
+    pointer-events: none;
+}
+
+.portal-a {
+    background: radial-gradient(ellipse, #fff 0%, #4dd2ff 35%, rgba(77,210,255,0) 70%);
+    box-shadow: 0 0 25px #4dd2ff;
+}
+
+.portal-b {
+    background: radial-gradient(ellipse, #fff 0%, #c58bff 35%, rgba(197,139,255,0) 70%);
+    box-shadow: 0 0 25px #c58bff;
+}
+
+@keyframes portalPulse {
+    from { transform: scale(0.9); opacity: 0.8; }
+    to   { transform: scale(1.1); opacity: 1; }
+}
+
+
+/* =========================================================
+   ITEMS: GOLDEN
+========================================================= */
+.item.golden {
+    background: radial-gradient(circle, rgba(255,235,120,0.7), rgba(255,190,40,0.25));
+    border-color: #ffd34d;
+    box-shadow: 0 0 34px rgba(255,210,60,1);
+    width: 78px;
+    height: 78px;
+    font-size: 44px;
+}
+
+
+/* =========================================================
+   SPIELER-ZUSTÄNDE
+========================================================= */
+.fighter.blocking::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 4px solid rgba(120,220,255,0.85);
+    box-shadow: 0 0 20px rgba(120,220,255,0.7);
+}
+
+.fighter.parrying::after {
+    border-color: #ffffff;
+    box-shadow: 0 0 30px #ffffff;
+}
+
+.fighter.enraged img {
+    filter:
+        drop-shadow(0 0 10px #ff2b2b)
+        drop-shadow(0 7px 5px rgba(0,0,0,0.5));
+}
+
+.fighter.stunned img {
+    filter: grayscale(0.8) brightness(0.8) drop-shadow(0 7px 5px rgba(0,0,0,0.5));
+}
+
+.fighter.hit-flash img {
+    filter:
+        brightness(2.2) sepia(1) saturate(7) hue-rotate(-30deg)
+        drop-shadow(0 7px 5px rgba(0,0,0,0.5));
+}
+
+
+/* =========================================================
+   RUNDEN-BANNER
+========================================================= */
+#round-banner {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    pointer-events: none;
+}
+
+#banner-text {
+    font-size: 96px;
+    font-weight: bold;
+    letter-spacing: 6px;
+    text-shadow: 0 0 30px rgba(255,255,255,0.4), 4px 4px 12px black;
+}
+
+#banner-sub {
+    font-size: 30px;
+    font-weight: bold;
+    color: #ffd34d;
+    text-shadow: 2px 2px 8px black;
+}
+
+#round-banner.pop #banner-text { animation: bannerPop 0.35s ease-out; }
+
+@keyframes bannerPop {
+    from { transform: scale(2.2); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+}
+
+#final-score {
+    font-size: 28px;
+    color: #ffd34d;
+    margin-top: -15px;
 }
