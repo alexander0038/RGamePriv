@@ -1,6 +1,3 @@
-/* =========================================================
-   GRUNDLAGEN
-========================================================= */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body { width: 100%; height: 100%; }
@@ -29,9 +26,6 @@ button:hover { transform: scale(1.05); background: #ddd; }
 button:active { transform: scale(0.97); }
 
 
-/* =========================================================
-   CHARAKTERAUSWAHL
-========================================================= */
 #character-select {
     width: 100vw;
     height: 100vh;
@@ -129,9 +123,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   ARENA
-========================================================= */
 #arena {
     position: relative;
     width: 100vw;
@@ -167,9 +158,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   BODEN + BLÖCKE (Höhe/Position setzt das JavaScript)
-========================================================= */
 #platforms {
     position: absolute;
     inset: 0;
@@ -185,9 +173,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   HUD
-========================================================= */
 #hud {
     position: absolute;
     top: 15px;
@@ -245,9 +230,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   CHARAKTERE (left/top = Mitte der Füße)
-========================================================= */
 .fighter {
     position: absolute;
     width: 180px;
@@ -269,9 +251,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   ANGRIFF (--dir = Blickrichtung: 1 rechts, -1 links)
-========================================================= */
 .attack-effect {
     position: absolute;
     width: 190px;
@@ -307,9 +286,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   MELDUNGEN
-========================================================= */
 #message {
     position: absolute;
     left: 50%;
@@ -323,9 +299,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   GAME OVER
-========================================================= */
 #game-over {
     position: fixed;
     inset: 0;
@@ -348,9 +321,6 @@ button:active { transform: scale(0.97); }
 #game-over button { font-size: 20px; padding: 15px 30px; }
 
 
-/* =========================================================
-   RESPONSIVE
-========================================================= */
 @media (max-width: 1000px) {
     #character-select h1 { font-size: 40px; }
     .players { flex-direction: column; align-items: center; gap: 25px; }
@@ -365,9 +335,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   SPECIAL ITEMS
-========================================================= */
 #items {
     position: absolute;
     inset: 0;
@@ -420,9 +387,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   BODEN (zwei Teile, dazwischen die Grube)
-========================================================= */
 .ground-piece {
     position: absolute;
     bottom: 0;
@@ -432,9 +396,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   MENÜ-HINWEIS
-========================================================= */
 .hint {
     margin: -20px 0 25px;
     color: #aaa;
@@ -443,9 +404,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   HUD-ERWEITERUNGEN
-========================================================= */
 .wins {
     margin-left: 10px;
     font-size: 18px;
@@ -496,9 +454,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   EFFEKT-EBENE (Partikel, Zahlen, Projektile)
-========================================================= */
 #fx {
     position: absolute;
     inset: 0;
@@ -548,9 +503,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   BOMBEN UND FALLEN
-========================================================= */
 .hazard {
     position: absolute;
     transform: translate(-50%, -100%);
@@ -569,9 +521,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   SPRUNGFEDERN UND TELEPORTER
-========================================================= */
 .spring {
     position: absolute;
     width: 90px;
@@ -621,9 +570,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   ITEMS: GOLDEN
-========================================================= */
 .item.golden {
     background: radial-gradient(circle, rgba(255,235,120,0.7), rgba(255,190,40,0.25));
     border-color: #ffd34d;
@@ -634,9 +580,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   SPIELER-ZUSTÄNDE
-========================================================= */
 .fighter.blocking::after {
     content: "";
     position: absolute;
@@ -668,9 +611,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   RUNDEN-BANNER
-========================================================= */
 #round-banner {
     position: fixed;
     inset: 0;
@@ -711,9 +651,6 @@ button:active { transform: scale(0.97); }
 }
 
 
-/* =========================================================
-   LEBENSLEISTE: Schadens-Schweif + Farbe nach HP
-========================================================= */
 .health-bar { position: relative; }
 
 .health { position: absolute; left: 0; top: 0; }
@@ -727,9 +664,6 @@ button:active { transform: scale(0.97); }
 .health.low { background: linear-gradient(to bottom, #ff6a5a, #c4281c); }
 
 
-/* =========================================================
-   GAME OVER: Statistik + Buttons
-========================================================= */
 #final-score {
     white-space: pre-line;
     text-align: center;
