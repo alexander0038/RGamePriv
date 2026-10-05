@@ -111,7 +111,7 @@
                     <span id="name1">SPIELER 1</span>
                     <span id="wins1" class="wins"></span>
                 </div>
-                <div class="health-bar"><div id="hp1" class="health"></div></div>
+                <div class="health-bar"><div id="hpghost1" class="health ghost"></div><div id="hp1" class="health"></div></div>
                 <div id="special1" class="special">SPEZIAL: 0 / 5</div>
                 <div id="effects1" class="effects"></div>
                 <div class="cooldowns">
@@ -128,7 +128,7 @@
                     <span id="name2">SPIELER 2</span>
                     <span id="wins2" class="wins"></span>
                 </div>
-                <div class="health-bar"><div id="hp2" class="health"></div></div>
+                <div class="health-bar"><div id="hpghost2" class="health ghost"></div><div id="hp2" class="health"></div></div>
                 <div id="special2" class="special">SPEZIAL: 0 / 5</div>
                 <div id="effects2" class="effects"></div>
                 <div class="cooldowns">
@@ -176,7 +176,10 @@
 
     <div id="final-score"></div>
 
-    <button onclick="location.reload()">NOCHMAL SPIELEN</button>
+    <div class="buttons">
+        <button onclick="rematch()">REVANCHE</button>
+        <button onclick="location.reload()">CHARAKTERE WÄHLEN</button>
+    </div>
 
 </div>
 
@@ -202,7 +205,7 @@ const DROP_TIME = 200;
 /* Karte */
 const GROUND_H = 110;
 const HUD_SAFE = 170;
-const PIT_WIDTH = 240;           /* Grube in der Mitte: Ring-Out! */
+const PIT_WIDTH = 300;           /* Grube in der Mitte: Ring-Out! */
 const RINGOUT_DEPTH = 260;       /* so tief unter dem Boden = K.O. */
 const SPRING_SPEED = -27;        /* Sprungfeder-Kraft */
 
@@ -224,6 +227,12 @@ const PROJECTILE_RADIUS = 85;
 const HIT_KNOCKBACK = 9;         /* Grund-Rückstoß pro Treffer */
 const KNOCKBACK_PER_MISSING_HP = 1.2;
 const DASH_COOLDOWN = 2000;
+const DASH_SPEED = 26;           /* Pixel pro Frame -> Dash ca. 310 px lang */
+const DASH_TIME = 200;           /* ms; währenddessen unverwundbar */
+const SPEED_SCALE = 1.45;        /* Laufgeschwindigkeit aller Charaktere */
+const COYOTE_TIME = 110;         /* ms: Sprung noch kurz nach der Kante möglich */
+const JUMP_BUFFER = 130;         /* ms: Sprung kurz vor der Landung vorgemerkt */
+const BODY_PUSH_DIST = 80;       /* Spieler schieben sich auseinander */
 const BLOCK_TIME = 450;
 const PARRY_WINDOW = 180;        /* so kurz nach Tastendruck = Parade */
 const BLOCK_COOLDOWN = 1300;
@@ -363,7 +372,13 @@ function createPlayer() {
 
         flashUntil: 0,
         springUntil: 0,
-        teleportUntil: 0
+        teleportUntil: 0,
+
+        dashUntil: 0,
+        dashDir: 1,
+        lastGrounded: 0,
+        jumpBufferUntil: 0,
+        jumpHeld: false
     };
 
 }
@@ -407,6 +422,15 @@ let lastItemSpawn = 0;
 let items = [];
 let hazards = [];
 let projectiles = [];
+
+let loopRunning = false;
+let ghostPct = { 1: 100, 2: 100 };
+
+function newStats() {
+    return { damage: 0, parries: 0, dodges: 0, crits: 0, maxCombo: 0 };
+}
+
+let stats = { 1: newStats(), 2: newStats() };
 
 let hitstopUntil = 0;
 let slowmoUntil = 0;
@@ -695,7 +719,17 @@ document.addEventListener("keydown", function(event) {
 });
 
 document.addEventListener("keyup", function(event) {
-    keys[event.key.toLowerCase()] = false;
+
+    const key = event.key.toLowerCase();
+
+    keys[key] = false;
+
+    /* Taste früh loslassen = kleinerer Sprung */
+    if (gameStarted && fighting) {
+        if (key === "w") cutJump(1);
+        if (key === "i") cutJump(2);
+    }
+
 });
 
 function releaseAllKeys() {
@@ -1018,9 +1052,9 @@ async function startGame() {
     starting = false;
     lastFrameTime = 0;
 
+    resetStats();
     startRound();
-
-    requestAnimationFrame(gameLoop);
+    startLoop();
 
 }
 
@@ -1058,6 +1092,7 @@ function resetRound() {
     clearProjectiles();
 
     suddenDeath = false;
+    ghostPct = { 1: 100, 2: 100 };
     $("timer").classList.remove("sudden");
     $("timer").textContent = "0:00";
 
@@ -1147,7 +1182,54 @@ function endGame(winner) {
     $("game-over").classList.remove("hidden");
 
     $("winner").textContent = `SPIELER ${winner} GEWINNT!`;
-    $("final-score").textContent = `Runden: ${wins[1]} : ${wins[2]}`;
+    const statLine = function(n) {
+        const st = stats[n];
+        return `Spieler ${n}: ${Math.round(st.damage)} Schaden • ${st.parries} Paraden • ` +
+               `${st.dodges} Ausweicher • ${st.crits} Krits • Combo x${st.maxCombo}`;
+    };
+
+    $("final-score").textContent =
+        `Runden: ${wins[1]} : ${wins[2]}\n${statLine(1)}\n${statLine(2)}`;
+
+}
+
+
+/* =========================================================
+   LOOP-START, STATISTIK, REVANCHE
+========================================================= */
+
+function startLoop() {
+
+    if (!loopRunning) {
+        loopRunning = true;
+        requestAnimationFrame(gameLoop);
+    }
+
+}
+
+function resetStats() {
+    stats = { 1: newStats(), 2: newStats() };
+}
+
+/* Gleiche Charaktere, neues Match */
+function rematch() {
+
+    $("game-over").classList.add("hidden");
+    $("game").classList.remove("hidden");
+
+    resetStats();
+
+    wins = { 1: 0, 2: 0 };
+    roundNumber = 0;
+
+    releaseAllKeys();
+
+    gameStarted = true;
+    lastFrameTime = 0;
+
+    buildLevel();
+    startRound();
+    startLoop();
 
 }
 
@@ -1191,7 +1273,8 @@ function isLocked(p) {
         now < p.disabledUntil ||
         now < p.rootedUntil ||
         now < p.fleeUntil ||
-        now < p.blockUntil
+        now < p.blockUntil ||
+        now < p.dashUntil
     );
 
 }
@@ -1230,7 +1313,20 @@ function move(player, dt) {
 
     if (now < p.disabledUntil || now < p.blockUntil) return;
 
-    let speed = characters[p.character].speed * dt;
+    /* Dash: schneller Zug in eine Richtung (Nachbilder-Spur) */
+    if (now < p.dashUntil) {
+
+        p.x += p.dashDir * DASH_SPEED * dt;
+
+        clampX(p);
+
+        burst(p.x - p.dashDir * 30, p.y - PLAYER_H / 2, 1, "rgba(255,255,255,0.55)", 25, 14);
+
+        return;
+
+    }
+
+    let speed = characters[p.character].speed * SPEED_SCALE * dt;
 
     if (now < p.speedUntil) speed *= SPEED_BOOST;
 
@@ -1299,8 +1395,12 @@ function applyPhysics(p, dt) {
     clampX(p);
 
 
-    /* Schwerkraft */
-    p.vy = Math.min(p.vy + GRAVITY * dt, MAX_FALL);
+    /* Schwerkraft (während des Dashs schwebt man) */
+    if (now < p.dashUntil) {
+        p.vy = 0;
+    } else {
+        p.vy = Math.min(p.vy + GRAVITY * dt, MAX_FALL);
+    }
 
     const fallSpeed = p.vy;
 
@@ -1356,10 +1456,22 @@ function applyPhysics(p, dt) {
     if (p.onGround) {
 
         p.airJumps = characters[p.character].doubleJump ? 1 : 0;
+        p.lastGrounded = now;
+        p.jumpHeld = false;
 
         if (wasAir && fallSpeed > 7) {
             dust(p.x, p.y);
         }
+
+        /* vorgemerkter Sprung wird bei der Landung ausgeführt */
+        if (wasAir && now < p.jumpBufferUntil && fighting && !isLocked(p)) {
+            p.jumpBufferUntil = 0;
+            doJump(p);
+        }
+
+    } else if (p.vy >= 0) {
+
+        p.jumpHeld = false;
 
     }
 
@@ -1374,32 +1486,91 @@ function applyPhysics(p, dt) {
 
 }
 
+function doJump(p) {
+
+    p.vy = JUMP_SPEED;
+    p.onGround = false;
+    p.platform = null;
+    p.lastGrounded = 0;
+    p.jumpHeld = true;
+
+    dust(p.x, p.y);
+    sfx("jump");
+
+}
+
 function jump(player) {
 
     const p = players[player];
+    const now = Date.now();
 
     if (!fighting || isLocked(p)) return;
 
-    if (p.onGround) {
+    /* Coyote-Time: kurz nach dem Verlassen einer Kante geht der Sprung noch */
+    const groundJump =
+        p.onGround || (p.vy >= 0 && now - p.lastGrounded <= COYOTE_TIME);
 
-        p.vy = JUMP_SPEED;
-        p.onGround = false;
-        p.platform = null;
+    if (groundJump) {
 
-        dust(p.x, p.y);
-        sfx("jump");
+        doJump(p);
 
     } else if (p.airJumps > 0) {
 
         p.airJumps--;
         p.vy = JUMP_SPEED * 0.9;
+        p.jumpHeld = true;
 
         burst(p.x, p.y, 8, "rgba(200,230,255,0.9)", 50, 8);
         sfx("jump");
 
+    } else {
+
+        /* Sprung kurz vor der Landung vormerken */
+        p.jumpBufferUntil = now + JUMP_BUFFER;
+
     }
 
 }
+
+/* Taste früh loslassen = kleinerer Sprung */
+function cutJump(player) {
+
+    const p = players[player];
+
+    if (p.jumpHeld && p.vy < -7) {
+        p.vy *= 0.5;
+    }
+
+    p.jumpHeld = false;
+
+}
+
+/* Spieler schieben sich weich auseinander (kein Ineinanderstehen) */
+function separatePlayers(dt) {
+
+    const a = players[1];
+    const b = players[2];
+    const now = Date.now();
+
+    if (now < a.dashUntil || now < b.dashUntil) return;
+
+    const dx = b.x - a.x;
+
+    if (Math.abs(dx) < BODY_PUSH_DIST && Math.abs(a.y - b.y) < 110) {
+
+        const dir = Math.sign(dx) || 1;
+        const push = (BODY_PUSH_DIST - Math.abs(dx)) * 0.2 * dt;
+
+        a.x -= dir * push;
+        b.x += dir * push;
+
+        clampX(a);
+        clampX(b);
+
+    }
+
+}
+
 
 function dropDown(player) {
 
@@ -1409,6 +1580,7 @@ function dropDown(player) {
 
     if (p.onGround && p.platform) {
         p.dropUntil = Date.now() + DROP_TIME;
+        p.lastGrounded = 0;
         p.onGround = false;
         p.platform = null;
         p.y += 2;
@@ -1620,12 +1792,25 @@ function damageEnemy(player, damage, opts) {
     let blocked = false;
 
 
+    /* Dash = kurz unverwundbar */
+    if (now < enemy.dashUntil) {
+
+        floatText(enemy.x, headY, "AUSGEWICHEN!", "info");
+
+        stats[otherPlayer(player)].dodges++;
+
+        return false;
+
+    }
+
+
     /* Parade / Block */
     if (now < enemy.blockUntil) {
 
         if (now - enemy.blockStart <= PARRY_WINDOW) {
 
             floatText(enemy.x, headY, "PARIERT!", "parry");
+            stats[otherPlayer(player)].parries++;
             burst(enemy.x, enemy.y - PLAYER_H / 2, 14, "#9ff0ff", 110, 9);
             sfx("parry");
             hitstop(110);
@@ -1679,6 +1864,10 @@ function damageEnemy(player, damage, opts) {
 
     dmg = Math.round(dmg * 10) / 10;
 
+    stats[player].damage += dmg;
+
+    if (crit) stats[player].crits++;
+
     enemy.hp = Math.max(0, enemy.hp - dmg);
     enemy.lastHit = now;
     enemy.lastHeal = now;
@@ -1714,6 +1903,10 @@ function damageEnemy(player, damage, opts) {
         if (now - attacker.lastComboHit > COMBO_WINDOW) attacker.combo = 0;
 
         attacker.combo++;
+
+        if (attacker.combo > stats[player].maxCombo) {
+            stats[player].maxCombo = attacker.combo;
+        }
         attacker.lastComboHit = now;
         enemy.combo = 0;
 
@@ -1810,9 +2003,8 @@ function dash(player) {
     burst(p.x, p.y - PLAYER_H / 2, 8, "rgba(255,255,255,0.7)", 60, 8);
     sfx("dash");
 
-    p.x += dx * 140;
-
-    clampX(p);
+    p.dashDir = dx;
+    p.dashUntil = now + DASH_TIME;
 
 }
 
@@ -2386,6 +2578,7 @@ function updateMapObjects() {
             ) {
 
                 p.vy = SPRING_SPEED;
+                p.jumpHeld = false;
                 p.onGround = false;
                 p.springUntil = now + 500;
 
@@ -2499,7 +2692,20 @@ function updateHUD() {
 
         const p = players[n];
 
-        $("hp" + n).style.width = (p.hp / p.maxHp * 100) + "%";
+        const pct = p.hp / p.maxHp * 100;
+
+        $("hp" + n).style.width = pct + "%";
+        $("hp" + n).classList.toggle("low", pct <= 30);
+        $("hp" + n).classList.toggle("mid", pct > 30 && pct <= 60);
+
+        /* roter "Schadens-Schweif" hinter der Lebensleiste */
+        if (ghostPct[n] < pct) {
+            ghostPct[n] = pct;
+        } else if (now - p.lastHit > 450) {
+            ghostPct[n] = Math.max(pct, ghostPct[n] - 0.7);
+        }
+
+        $("hpghost" + n).style.width = ghostPct[n] + "%";
 
         $("special" + n).textContent =
             p.specialReady
@@ -2542,7 +2748,10 @@ function updateTimer() {
 
 function gameLoop(timestamp) {
 
-    if (!gameStarted) return;
+    if (!gameStarted) {
+        loopRunning = false;
+        return;
+    }
 
     if (!lastFrameTime) lastFrameTime = timestamp;
 
@@ -2563,6 +2772,8 @@ function gameLoop(timestamp) {
 
         applyPhysics(players[1], dt);
         applyPhysics(players[2], dt);
+
+        if (fighting) separatePlayers(dt);
 
         if (fighting) {
 
