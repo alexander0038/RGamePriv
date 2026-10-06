@@ -1,106 +1,38 @@
-"""
-Online-Modus für 1v1 Battle: ein winziger Relay-Server auf Basis von Flask-SocketIO.
+# Beispiel – NUR die markierten Teile in deine echte app.py übernehmen!
+# Bot- und 1v1-Modus laufen auch dann, wenn flask-socketio nicht installiert ist.
+from flask import Flask, render_template
+from flask_socketio import SocketIO
+from online import register_online
 
-Der Server rechnet NICHTS vom Spiel. Er verwaltet nur Räume (4-stelliger Code)
-und leitet Nachrichten zwischen Host und Gast weiter.
+app = Flask(__name__)                      # 1. zuerst die App anlegen
 
-Einbinden in deine app.py:
+socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")   # 2. danach SocketIO
+register_online(socketio)
 
+# --- Online-Modus (optional) ---
+try:
     from flask_socketio import SocketIO
     from online import register_online
-
-    socketio = SocketIO(app)          # app = deine Flask-App
+    # async_mode="threading": passt zu gunicorn --threads (siehe unten) und
+    # verhindert, dass eventlet/gevent automatisch gewählt wird und hängt.
+    socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
     register_online(socketio)
-
-    if __name__ == "__main__":
-        socketio.run(app, host="0.0.0.0", port=5000)
-
-Installieren:  pip install flask-socketio simple-websocket
-"""
-
-import random
-
-from flask import request
-from flask_socketio import emit, join_room
-
-ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # ohne I/O/0/1 (Verwechslungsgefahr)
-
-rooms = {}       # code -> {"host": sid, "guest": sid | None}
-sid_room = {}    # sid  -> code
+except ImportError as e:
+    print("Online-Modus deaktiviert:", e)
+    socketio = None
+# -------------------------------
 
 
-def _new_code():
-    while True:
-        code = "".join(random.choices(ALPHABET, k=4))
-        if code not in rooms:
-            return code
+@app.route("/")
+def index():
+    return render_template("index.html")
 
 
-def _leave(sid):
-    """Raum auflösen und den anderen Spieler benachrichtigen."""
-    code = sid_room.pop(sid, None)
-    if not code:
-        return
+# Render Start Command:   gunicorn -w 1 --threads 100 app:app
+# (genau 1 Worker, weil die Räume im Arbeitsspeicher liegen)
 
-    room = rooms.pop(code, None)
-    if not room:
-        return
-
-    for other in (room["host"], room["guest"]):
-        if other and other != sid:
-            sid_room.pop(other, None)
-            emit("peer_left", {}, to=other)
-
-
-def register_online(socketio):
-
-    @socketio.on("create")
-    def on_create():
-        _leave(request.sid)
-
-        code = _new_code()
-        rooms[code] = {"host": request.sid, "guest": None}
-        sid_room[request.sid] = code
-
-        join_room(code)
-        emit("room_created", {"code": code})
-
-    @socketio.on("join")
-    def on_join(data):
-        code = str((data or {}).get("code", "")).strip().upper()
-        room = rooms.get(code)
-
-        if not room:
-            emit("join_error", {"msg": "Raum nicht gefunden."})
-            return
-
-        if room["guest"]:
-            emit("join_error", {"msg": "Der Raum ist schon voll."})
-            return
-
-        if room["host"] == request.sid:
-            emit("join_error", {"msg": "Das ist dein eigener Raum."})
-            return
-
-        _leave(request.sid)
-
-        room["guest"] = request.sid
-        sid_room[request.sid] = code
-
-        join_room(code)
-        emit("joined", {"code": code})
-        emit("peer_joined", {}, to=room["host"])
-
-    @socketio.on("relay")
-    def on_relay(data):
-        code = sid_room.get(request.sid)
-        if code:
-            emit("msg", data, to=code, include_self=False)
-
-    @socketio.on("ping_t")
-    def on_ping():
-        return True          # Antwort (Ack) für die Ping-Anzeige im Spiel
-
-    @socketio.on("disconnect")
-    def on_disconnect(*args):
-        _leave(request.sid)
+if __name__ == "__main__":      # nur für lokales Testen
+    if socketio:
+        socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True)
+    else:
+        app.run(host="0.0.0.0", port=5000, debug=True)
