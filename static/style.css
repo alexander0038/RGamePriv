@@ -726,3 +726,43 @@ button:active { transform: scale(0.97); }
 #diff-easy.active   { background: #1b7a3a; border-color: #4cff85; }
 #diff-medium.active { background: #9a7410; border-color: #ffd34d; }
 #diff-hard.active   { background: #8a1c1c; border-color: #ff5a5a; }
+
+
+#mode-select { flex-wrap: wrap; }
+
+#online-panel { margin: -8px 0 22px; }
+
+.online-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.online-or { color: #aaa; }
+
+#room-code {
+    width: 110px;
+    padding: 12px;
+    border: 2px solid #555;
+    border-radius: 10px;
+    background: #202020;
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+    letter-spacing: 6px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+#room-code:focus { outline: none; border-color: #39ef68; }
+
+#online-status {
+    margin-top: 14px;
+    min-height: 22px;
+    color: #ffd34d;
+    font-size: 17px;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
