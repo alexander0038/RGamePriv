@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>1v1 Battle</title>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <link rel="stylesheet"
           href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -19,12 +20,23 @@
     <div id="mode-select">
         <button id="mode-1v1" class="mode-button active" onclick="setGameMode('1v1')">1V1 SPIELER</button>
         <button id="mode-bot" class="mode-button" onclick="setGameMode('bot')">GEGEN BOT</button>
+        <button id="mode-online" class="mode-button" onclick="setGameMode('online')">ONLINE</button>
     </div>
 
     <div id="difficulty-select" class="hidden">
         <button id="diff-easy" class="mode-button diff-button" onclick="setDifficulty('easy')">LEICHT</button>
         <button id="diff-medium" class="mode-button diff-button" onclick="setDifficulty('medium')">MITTEL</button>
         <button id="diff-hard" class="mode-button diff-button active" onclick="setDifficulty('hard')">SCHWER</button>
+    </div>
+
+    <div id="online-panel" class="hidden">
+        <div id="online-row" class="online-row">
+            <button onclick="netCreateRoom()">RAUM ERSTELLEN</button>
+            <span class="online-or">oder</span>
+            <input id="room-code" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false">
+            <button onclick="netJoinRoom()">BEITRETEN</button>
+        </div>
+        <div id="online-status"></div>
     </div>
 
     <p id="mode-hint" class="hint">Best of 3 &bull; M = Ton an/aus</p>
@@ -420,6 +432,31 @@ let ready2 = false;
 let gameMode = "1v1";
 let botDifficulty = "hard";
 
+// ===== ONLINE: globale Zustände =====
+const VIRTUAL_W = 1920;
+const VIRTUAL_H = 1080;
+const NET_SEND_MS = 33;
+const NET_P2KEYS = ["j", "l", "i", "k", "o", "p", "u"];
+const NET_KEYMAP = { a: "j", d: "l", w: "i", s: "k", e: "o", r: "p", q: "u" };
+const NET_TIME_FIELDS = /Until$|^last|^blockStart$|^blockReadyAt$/;
+const NET_PFIELDS = [
+    "x", "y", "facing", "hp", "maxHp", "character", "hits", "specialReady",
+    "lastHit", "lastAttack", "lastDash", "blockStart", "blockUntil", "blockReadyAt",
+    "disabledUntil", "shieldUntil", "flashUntil", "slipperyUntil", "collinUltUntil",
+    "speedUntil", "damageUntil", "poisonUntil", "reverseUntil"
+];
+
+let netRole = null;
+let netSocket = null;
+let netRoom = null;
+let netEvents = [];
+let netLastSend = 0;
+let netRemoteApply = false;
+let netLastRound = -1;
+let arenaBase = "";
+let uidCounter = 0;
+const netEls = { items: {}, hazards: {}, projs: {} };
+
 const BOT_LEVELS = {
     easy: {
         think: 240, chaseJump: 0.2, randJump: 0.02, dash: 0.05,
@@ -667,12 +704,12 @@ function updateShake() {
 
         const amp = shakeStrength * ((shakeUntil - now) / shakeDuration);
 
-        arena.style.transform =
-            `translate(${(Math.random() * 2 - 1) * amp}px, ${(Math.random() * 2 - 1) * amp}px)`;
+        arena.style.transform = arenaBase +
+            ` translate(${(Math.random() * 2 - 1) * amp}px, ${(Math.random() * 2 - 1) * amp}px)`;
 
-    } else if (arena.style.transform) {
+    } else if (arena.style.transform !== arenaBase) {
 
-        arena.style.transform = "";
+        arena.style.transform = arenaBase;
 
     }
 
@@ -717,15 +754,24 @@ const keys = {};
 
 document.addEventListener("keydown", function(event) {
 
+    if (event.target && event.target.tagName === "INPUT") return;
+
     initAudio();
 
     const key = event.key.toLowerCase();
+
+    if (netIgnoreLocal(event, key)) return;
 
     keys[key] = true;
 
     if (key === "m" && !event.repeat) {
         muted = !muted;
         showMessage(muted ? "🔇 Ton aus" : "🔊 Ton an");
+    }
+
+    if (netRole === "guest") {
+        netSend({ k: "in", t: "d", key: key, s: event.key === "Shift" ? 1 : 0, r: event.repeat ? 1 : 0 });
+        return;
     }
 
     if (!gameStarted || event.repeat || !fighting) {
@@ -758,9 +804,18 @@ document.addEventListener("keydown", function(event) {
 
 document.addEventListener("keyup", function(event) {
 
+    if (event.target && event.target.tagName === "INPUT") return;
+
     const key = event.key.toLowerCase();
 
+    if (netIgnoreLocal(event, key)) return;
+
     keys[key] = false;
+
+    if (netRole === "guest") {
+        netSend({ k: "in", t: "u", key: key, s: event.key === "Shift" ? 1 : 0 });
+        return;
+    }
 
 
     if (gameStarted && fighting) {
@@ -771,7 +826,11 @@ document.addEventListener("keyup", function(event) {
 });
 
 function releaseAllKeys() {
-    Object.keys(keys).forEach(function(k) { keys[k] = false; });
+    Object.keys(keys).forEach(function(k) {
+        if (netRole === "host" && NET_P2KEYS.indexOf(k) >= 0) return;
+        keys[k] = false;
+    });
+    if (netRole === "guest") netSend({ k: "in", t: "rel" });
 }
 
 window.addEventListener("blur", releaseAllKeys);
@@ -782,13 +841,15 @@ document.addEventListener("visibilitychange", function() {
 
 
 function setGameMode(mode) {
-    if (ready1 || ready2 || gameStarted) return;
+    if (ready1 || ready2 || gameStarted || netRole) return;
 
     gameMode = mode;
 
     $("mode-1v1").classList.toggle("active", mode === "1v1");
     $("mode-bot").classList.toggle("active", mode === "bot");
     $("difficulty-select").classList.toggle("hidden", mode !== "bot");
+    $("mode-online").classList.toggle("active", mode === "online");
+    $("online-panel").classList.toggle("hidden", mode !== "online");
 
     const p2 = document.querySelector(".player-select:nth-child(2)");
     if (p2) {
@@ -798,7 +859,9 @@ function setGameMode(mode) {
     $("mode-hint").textContent =
         mode === "bot"
             ? "GEGEN BOT • Schwierigkeit wählen • Bot wählt automatisch einen Charakter"
-            : "Best of 3 • M = Ton an/aus";
+            : mode === "online"
+                ? "ONLINE • Raum erstellen oder mit Code beitreten • Jeder spielt mit A/D/W/S/E/R/Q/Shift"
+                : "Best of 3 • M = Ton an/aus";
 
     const title2 = document.querySelector("#characters-p2").previousElementSibling;
     if (title2) title2.textContent = mode === "bot" ? "BOT" : "SPIELER 2";
@@ -849,6 +912,8 @@ function createCharacterButtons() {
 
 function selectCharacter(player, name, element) {
 
+    if (netRole && !netRemoteApply && player !== netMe()) return;
+
     if (player === 1 && ready1) return;
     if (player === 2 && ready2) return;
 
@@ -863,11 +928,15 @@ function selectCharacter(player, name, element) {
 
     element.classList.add("selected");
 
+    if (netRole && !netRemoteApply) netSend({ k: "sel", p: player, n: name });
+
 }
 
 function readyPlayer(player) {
 
     initAudio();
+
+    if (netRole && !netRemoteApply && player !== netMe()) return;
 
     if (gameMode === "bot" && player === 2) return;
 
@@ -888,12 +957,15 @@ function readyPlayer(player) {
     label.textContent = isReady ? "BEREIT!" : "NICHT BEREIT";
     label.classList.toggle("ready-active", isReady);
 
+    if (netRole && !netRemoteApply) netSend({ k: "ready", p: player, v: isReady });
+
     if (gameMode === "bot" && player === 1 && ready1) {
         startBotIfReady();
         return;
     }
 
     if (ready1 && ready2) {
+        if (netRole === "guest") return;
         startGame();
     }
 
@@ -1092,6 +1164,8 @@ window.addEventListener("resize", function() {
 
     if (!gameStarted) return;
 
+    if (gameMode === "online") { netFitArena(); return; }
+
     buildLevel();
     clearItems();
     clearHazards();
@@ -1112,6 +1186,8 @@ async function startGame() {
 
     starting = true;
 
+    if (netRole === "host") netSend({ k: "start", a: selected1, b: selected2 });
+
     await loadLevelImages();
 
     players[1].character = selected1;
@@ -1128,6 +1204,7 @@ async function startGame() {
     $("character-select").classList.add("hidden");
     $("game").classList.remove("hidden");
 
+    setupArena();
     buildLevel();
 
     wins = { 1: 0, 2: 0 };
@@ -1140,7 +1217,7 @@ async function startGame() {
     lastFrameTime = 0;
 
     resetStats();
-    startRound();
+    if (netRole !== "guest") startRound();
     startLoop();
 
 }
@@ -1265,6 +1342,10 @@ function endRound(winner, reason) {
 
 function endGame(winner) {
 
+    if (netRole === "host") {
+        netSend({ k: "over", winner: winner, wins: [wins[1], wins[2]], stats: stats });
+    }
+
     gameStarted = false;
     fighting = false;
 
@@ -1302,6 +1383,14 @@ function resetStats() {
 
 function rematch() {
 
+    if (netRole === "guest" && !netRemoteApply) {
+        netSend({ k: "rematch_req" });
+        $("final-score").textContent += "\n\nWarte auf den Host …";
+        return;
+    }
+
+    if (netRole === "host" && !netRemoteApply) netSend({ k: "rematch" });
+
     $("game-over").classList.add("hidden");
     $("game").classList.remove("hidden");
 
@@ -1316,7 +1405,7 @@ function rematch() {
     lastFrameTime = 0;
 
     buildLevel();
-    startRound();
+    if (netRole !== "guest") startRound();
     startLoop();
 
 }
@@ -1848,7 +1937,8 @@ function spawnBrush(owner, x, y, vx, vy, gravity, damage, spin) {
         dir: vx < 0 ? -1 : 1,
         damage: damage,
         el: el,
-        born: Date.now()
+        born: Date.now(),
+        uid: ++uidCounter
     };
 
     el.style.transform = `translate(-50%, -50%) scaleX(${pr.dir})`;
@@ -2469,7 +2559,8 @@ function spawnItem() {
         y: y,
         surfaceY: surface.y,
         el: el,
-        spawnedAt: Date.now()
+        spawnedAt: Date.now(),
+        uid: ++uidCounter
     });
 
 }
@@ -2600,7 +2691,7 @@ function placeHazard(kind, owner, x, y) {
 
     $("items").appendChild(el);
 
-    hazards.push({ kind: kind, owner: owner, x: x, y: y, el: el, born: Date.now() });
+    hazards.push({ kind: kind, owner: owner, x: x, y: y, el: el, born: Date.now(), uid: ++uidCounter });
 
 }
 
@@ -2792,7 +2883,7 @@ function updateMapObjects() {
         const p = players[n];
 
 
-        level.springs.forEach(function(s) {
+        level.springs.forEach(function(s, si) {
 
             if (
                 p.onGround && !p.platform &&
@@ -2806,6 +2897,7 @@ function updateMapObjects() {
                 p.springUntil = now + 500;
 
                 s.el.classList.add("spring-active");
+                netPushEvent("springAnim", [si]);
                 setTimeout(function() { s.el.classList.remove("spring-active"); }, 250);
 
                 burst(s.x, s.top, 10, "#ffb02e", 80, 8);
@@ -2982,6 +3074,16 @@ function gameLoop(timestamp) {
 
     const now = Date.now();
 
+    if (netRole === "guest") {
+        netSmooth();
+        updatePositions();
+        updateHUD();
+        if (fighting) updateTimer();
+        updateShake();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+
     if (now < slowmoUntil) dt *= SLOWMO_SCALE;
 
     if (now >= hitstopUntil) {
@@ -3020,10 +3122,430 @@ function gameLoop(timestamp) {
 
     updateShake();
 
+    if (netRole === "host" && now - netLastSend >= NET_SEND_MS) {
+        netLastSend = now;
+        netSend({ k: "snap", s: netBuildSnapshot() });
+        netEvents = [];
+    }
+
     requestAnimationFrame(gameLoop);
 
 }
 
+
+
+// =====================================================================
+//  ONLINE-MODUS
+//  Host = rechnet das komplette Spiel (Spieler 1)
+//  Gast = schickt Tasten, bekommt Spielstand + Effekte (Spieler 2)
+// =====================================================================
+
+const NET_ORIG = {};
+const NET_CUSTOM = {
+    springAnim: function(i) {
+        const sp = level.springs[i];
+        if (!sp) return;
+        sp.el.classList.add("spring-active");
+        setTimeout(function() { sp.el.classList.remove("spring-active"); }, 250);
+    }
+};
+
+["burst", "floatText", "shake", "sfx", "showMessage", "showBanner", "hideBanner", "showAttack"]
+    .forEach(function(name) {
+        NET_ORIG[name] = window[name];
+        window[name] = function() {
+            if (netRole === "host" && netEvents.length < 400) {
+                netEvents.push([name, Array.prototype.slice.call(arguments)]);
+            }
+            return NET_ORIG[name].apply(this, arguments);
+        };
+    });
+
+function netPushEvent(name, args) {
+    if (netRole === "host" && netEvents.length < 400) netEvents.push([name, args]);
+}
+
+function netMe() { return netRole === "host" ? 1 : 2; }
+
+function netStatus(text) { $("online-status").textContent = text; }
+
+function netSend(obj) {
+    if (netSocket && netRole) netSocket.emit("relay", obj);
+}
+
+function netIgnoreLocal(event, key) {
+    return netRole === "host" && (
+        NET_P2KEYS.indexOf(key) >= 0 ||
+        (event.key === "Shift" && event.location === KeyboardEvent.DOM_KEY_LOCATION_RIGHT)
+    );
+}
+
+function netConnect(cb) {
+
+    if (typeof io === "undefined") {
+        netStatus("Socket.IO konnte nicht geladen werden (Internet / Server prüfen).");
+        return;
+    }
+
+    if (!netSocket) {
+
+        netSocket = io();
+
+        netSocket.on("room_created", function(d) {
+            netRole = "host";
+            netRoom = d.code;
+            $("online-row").classList.add("hidden");
+            netStatus("Raum-Code: " + d.code + "  •  Du bist SPIELER 1  •  Warte auf Mitspieler …");
+        });
+
+        netSocket.on("joined", function(d) {
+            netRole = "guest";
+            netRoom = d.code;
+            netEnterSelect();
+        });
+
+        netSocket.on("peer_joined", function() { netEnterSelect(); });
+
+        netSocket.on("join_error", function(d) { netStatus(d.msg || "Beitritt fehlgeschlagen."); });
+
+        netSocket.on("peer_left", function() {
+            alert("Der Mitspieler hat die Verbindung verloren.");
+            location.reload();
+        });
+
+        netSocket.on("disconnect", function() {
+            if (netRole) {
+                alert("Verbindung zum Server verloren.");
+                location.reload();
+            }
+        });
+
+        netSocket.on("msg", netOnMessage);
+
+    }
+
+    if (netSocket.connected) cb();
+    else netSocket.once("connect", cb);
+
+}
+
+function netCreateRoom() {
+    if (gameMode !== "online" || netRole) return;
+    netStatus("Verbinde …");
+    netConnect(function() { netSocket.emit("create"); });
+}
+
+function netJoinRoom() {
+    if (gameMode !== "online" || netRole) return;
+    const code = $("room-code").value.trim().toUpperCase();
+    if (code.length !== 4) { netStatus("Bitte den 4-stelligen Code eingeben."); return; }
+    netStatus("Verbinde …");
+    netConnect(function() { netSocket.emit("join", { code: code }); });
+}
+
+function netEnterSelect() {
+
+    const me = netMe();
+
+    $("online-row").classList.add("hidden");
+
+    netStatus("Raum " + netRoom + "  •  Du bist SPIELER " + me + "  •  Mitspieler verbunden");
+
+    document.querySelectorAll(".player-select").forEach(function(el, i) {
+        el.classList.toggle("bot-mode", i + 1 !== me);
+    });
+
+    // bereits gewählte Charaktere dem neuen Mitspieler zeigen
+    const mine = me === 1 ? selected1 : selected2;
+    if (mine) netSend({ k: "sel", p: me, n: mine });
+
+}
+
+function netOnMessage(m) {
+
+    if (!m || !m.k) return;
+
+    switch (m.k) {
+
+        case "in":
+            netRemoteInput(m);
+            break;
+
+        case "snap":
+            if (netRole === "guest") netApplySnapshot(m.s);
+            break;
+
+        case "sel": {
+            const el = document.querySelector("#characters-p" + m.p + " .character-option[title='" + m.n + "']");
+            if (!el) break;
+            netRemoteApply = true;
+            try { selectCharacter(m.p, m.n, el); } finally { netRemoteApply = false; }
+            break;
+        }
+
+        case "ready": {
+            const cur = m.p === 1 ? ready1 : ready2;
+            if (cur === m.v) break;
+            netRemoteApply = true;
+            try { readyPlayer(m.p); } finally { netRemoteApply = false; }
+            break;
+        }
+
+        case "start":
+            if (netRole !== "guest") break;
+            selected1 = m.a;
+            selected2 = m.b;
+            gameMode = "online";
+            startGame();
+            break;
+
+        case "over":
+            if (netRole !== "guest") break;
+            stats = m.stats;
+            wins = { 1: m.wins[0], 2: m.wins[1] };
+            endGame(m.winner);
+            break;
+
+        case "rematch_req":
+            if (netRole === "host" && !gameStarted) {
+                netRemoteApply = true;
+                try { rematch(); } finally { netRemoteApply = false; }
+                netSend({ k: "rematch" });
+            }
+            break;
+
+        case "rematch":
+            if (netRole === "guest") {
+                netRemoteApply = true;
+                try { rematch(); } finally { netRemoteApply = false; }
+            }
+            break;
+
+    }
+
+}
+
+function netRemoteInput(m) {
+
+    if (netRole !== "host") return;
+
+    if (m.t === "rel") {
+        NET_P2KEYS.forEach(function(k) { keys[k] = false; });
+        return;
+    }
+
+    if (m.s) {
+        if (m.t === "d" && !m.r && gameStarted && fighting) dash(2);
+        return;
+    }
+
+    const k = NET_KEYMAP[m.key];
+    if (!k) return;
+
+    if (m.t === "u") {
+        keys[k] = false;
+        if (gameStarted && fighting && k === "i") cutJump(2);
+        return;
+    }
+
+    keys[k] = true;
+
+    if (!gameStarted || !fighting || m.r) return;
+
+    if (k === "o") attack(2);
+    if (k === "u") special(2);
+    if (k === "p") block(2);
+    if (k === "i") jump(2);
+    if (k === "k") dropDown(2);
+
+}
+
+function netBuildSnapshot() {
+
+    const now = Date.now();
+    const pl = {};
+
+    [1, 2].forEach(function(n) {
+        const p = players[n];
+        const o = {};
+        NET_PFIELDS.forEach(function(f) {
+            o[f] = NET_TIME_FIELDS.test(f) ? p[f] - now : p[f];
+        });
+        pl[n] = o;
+    });
+
+    return {
+        pl: pl,
+        f: fighting ? 1 : 0,
+        w: [wins[1], wins[2]],
+        rn: roundNumber,
+        rs: roundStart - now,
+        sd: suddenDeath ? 1 : 0,
+        it: items.map(function(i) {
+            return { u: i.uid, id: i.type.id, ic: i.type.icon, x: i.x, y: i.y, a: now - i.spawnedAt };
+        }),
+        hz: hazards.map(function(h) {
+            return { u: h.uid, k: h.kind, x: h.x, y: h.y, a: now - h.born };
+        }),
+        pr: projectiles.map(function(r) {
+            return { u: r.uid, x: r.x, y: r.y, d: r.dir, r: r.rot, o: r.owner };
+        }),
+        ev: netEvents
+    };
+
+}
+
+function netSync(map, list, make, update) {
+
+    const seen = {};
+
+    list.forEach(function(o) {
+        seen[o.u] = true;
+        let el = map[o.u];
+        if (!el) { el = make(o); map[o.u] = el; }
+        update(el, o);
+    });
+
+    Object.keys(map).forEach(function(k) {
+        if (!seen[k]) { map[k].remove(); delete map[k]; }
+    });
+
+}
+
+function netApplySnapshot(s) {
+
+    if (!gameStarted || !s) return;
+
+    const now = Date.now();
+
+    [1, 2].forEach(function(n) {
+        const p = players[n];
+        const o = s.pl[n];
+        NET_PFIELDS.forEach(function(f) {
+            if (f === "x") p.tx = o.x;
+            else if (f === "y") p.ty = o.y;
+            else p[f] = NET_TIME_FIELDS.test(f) ? now + o[f] : o[f];
+        });
+    });
+
+    fighting = !!s.f;
+    wins[1] = s.w[0];
+    wins[2] = s.w[1];
+    roundStart = now + s.rs;
+
+    if (s.rn !== netLastRound) {
+        netLastRound = s.rn;
+        roundNumber = s.rn;
+        ghostPct = { 1: 100, 2: 100 };
+        $("timer").textContent = "0:00";
+    }
+
+    const sd = !!s.sd;
+    if (sd !== suddenDeath) {
+        suddenDeath = sd;
+        $("timer").classList.toggle("sudden", sd);
+    }
+
+    netSync(netEls.items, s.it, function(o) {
+        const el = document.createElement("div");
+        const icon = document.createElement("span");
+        el.className = "item" + (o.id === "golden" ? " golden" : "");
+        icon.textContent = o.ic;
+        el.appendChild(icon);
+        $("items").appendChild(el);
+        return el;
+    }, function(el, o) {
+        el.style.left = o.x + "px";
+        el.style.top = o.y + "px";
+        el.classList.toggle("expiring", o.a > ITEM_LIFETIME - 3000);
+    });
+
+    netSync(netEls.hazards, s.hz, function(o) {
+        const el = document.createElement("div");
+        el.className = "hazard " + o.k;
+        el.textContent = o.k === "bomb" ? "💣" : "🪤";
+        $("items").appendChild(el);
+        return el;
+    }, function(el, o) {
+        el.style.left = o.x + "px";
+        el.style.top = o.y + "px";
+        if (o.k === "bomb") el.classList.toggle("fast", BOMB_FUSE - o.a < 800);
+    });
+
+    netSync(netEls.projs, s.pr, function(o) {
+        const el = document.createElement("img");
+        const owner = players[o.o];
+        el.className = "projectile";
+        el.src = IMG_ATTACK + characters[owner.character].attack + ".png";
+        $("fx").appendChild(el);
+        return el;
+    }, function(el, o) {
+        el.style.left = o.x + "px";
+        el.style.top = o.y + "px";
+        el.style.transform = `translate(-50%, -50%) scaleX(${o.d}) rotate(${o.r}deg)`;
+    });
+
+    (s.ev || []).forEach(function(e) {
+        const fn = NET_ORIG[e[0]] || NET_CUSTOM[e[0]];
+        if (fn) fn.apply(null, e[1]);
+    });
+
+}
+
+function netSmooth() {
+
+    [1, 2].forEach(function(n) {
+
+        const p = players[n];
+
+        if (p.tx === undefined) return;
+
+        if (Math.abs(p.tx - p.x) > 250 || Math.abs(p.ty - p.y) > 250) {
+            p.x = p.tx;
+            p.y = p.ty;
+        } else {
+            p.x += (p.tx - p.x) * 0.5;
+            p.y += (p.ty - p.y) * 0.5;
+        }
+
+    });
+
+}
+
+function netFitArena() {
+
+    const k = Math.min(window.innerWidth / VIRTUAL_W, window.innerHeight / VIRTUAL_H);
+    const ox = (window.innerWidth - VIRTUAL_W * k) / 2;
+    const oy = (window.innerHeight - VIRTUAL_H * k) / 2;
+
+    arenaBase = `translate(${ox}px, ${oy}px) scale(${k})`;
+    $("arena").style.transform = arenaBase;
+
+}
+
+function setupArena() {
+
+    const arena = $("arena");
+
+    if (gameMode === "online") {
+
+        arena.style.position = "absolute";
+        arena.style.left = "0";
+        arena.style.top = "0";
+        arena.style.width = VIRTUAL_W + "px";
+        arena.style.height = VIRTUAL_H + "px";
+        arena.style.transformOrigin = "0 0";
+
+        netFitArena();
+
+    } else {
+
+        arena.style.cssText = "";
+        arenaBase = "";
+
+    }
+
+}
 
 createCharacterButtons();
 
