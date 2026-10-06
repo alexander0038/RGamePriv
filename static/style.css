@@ -675,3 +675,11 @@ button:active { transform: scale(0.97); }
     display: flex;
     gap: 20px;
 }
+
+
+.fighter.slippery img {
+    filter:
+        sepia(0.7) saturate(2)
+        drop-shadow(0 0 12px #ffe066)
+        drop-shadow(0 7px 5px rgba(0,0,0,0.5));
+}
