@@ -21,6 +21,12 @@
         <button id="mode-bot" class="mode-button" onclick="setGameMode('bot')">GEGEN BOT</button>
     </div>
 
+    <div id="difficulty-select" class="hidden">
+        <button id="diff-easy" class="mode-button diff-button" onclick="setDifficulty('easy')">LEICHT</button>
+        <button id="diff-medium" class="mode-button diff-button" onclick="setDifficulty('medium')">MITTEL</button>
+        <button id="diff-hard" class="mode-button diff-button active" onclick="setDifficulty('hard')">SCHWER</button>
+    </div>
+
     <p id="mode-hint" class="hint">Best of 3 &bull; M = Ton an/aus</p>
 
     <div class="players">
@@ -412,6 +418,36 @@ let ready1 = false;
 let ready2 = false;
 
 let gameMode = "1v1";
+let botDifficulty = "hard";
+
+const BOT_LEVELS = {
+    easy: {
+        think: 240, chaseJump: 0.2, randJump: 0.02, dash: 0.05,
+        attackMul: 1.7, attackMin: 950, rangeBonus: -45,
+        miss: 0.35, block: 0.01, specialDelay: 2500, specialChance: 0.5
+    },
+    medium: {
+        think: 150, chaseJump: 0.4, randJump: 0.03, dash: 0.11,
+        attackMul: 1.05, attackMin: 620, rangeBonus: 0,
+        miss: 0.15, block: 0.04, specialDelay: 1500, specialChance: 0.8
+    },
+    hard: {
+        think: 90, chaseJump: 0.65, randJump: 0.045, dash: 0.18,
+        attackMul: 0.72, attackMin: 420, rangeBonus: 25,
+        miss: 0, block: 0.08, specialDelay: 900, specialChance: 1
+    }
+};
+
+const CHARACTER_COLORS = {
+    Elia: "#e0453a",
+    Toni: "#f2a516",
+    Alex: "#2f7de1",
+    HenningPrime: "#8e44d8",
+    MaxH: "#2fae5b",
+    Fabian: "#e8d23a",
+    Isabella: "#e55aa8",
+    Collin: "#20b8c4"
+};
 let botNextThink = 0;
 let botNextAttack = 0;
 let botNextAction = 0;
@@ -752,6 +788,7 @@ function setGameMode(mode) {
 
     $("mode-1v1").classList.toggle("active", mode === "1v1");
     $("mode-bot").classList.toggle("active", mode === "bot");
+    $("difficulty-select").classList.toggle("hidden", mode !== "bot");
 
     const p2 = document.querySelector(".player-select:nth-child(2)");
     if (p2) {
@@ -760,11 +797,22 @@ function setGameMode(mode) {
 
     $("mode-hint").textContent =
         mode === "bot"
-            ? "GEGEN BOT • Spieler 1 steuert • Bot wählt automatisch einen Charakter"
+            ? "GEGEN BOT • Schwierigkeit wählen • Bot wählt automatisch einen Charakter"
             : "Best of 3 • M = Ton an/aus";
 
     const title2 = document.querySelector("#characters-p2").previousElementSibling;
     if (title2) title2.textContent = mode === "bot" ? "BOT" : "SPIELER 2";
+}
+
+function setDifficulty(level) {
+    if (ready1 || ready2 || gameStarted) return;
+    if (!BOT_LEVELS[level]) return;
+
+    botDifficulty = level;
+
+    ["easy", "medium", "hard"].forEach(function(l) {
+        $("diff-" + l).classList.toggle("active", l === level);
+    });
 }
 
 function chooseBotCharacter() {
@@ -785,6 +833,7 @@ function createCharacterButtons() {
             img.src = IMG_CHAR + name + ".png";
             img.className = "character-option";
             img.title = name;
+            img.style.setProperty("--c", CHARACTER_COLORS[name] || "#888");
 
             img.onclick = function() {
                 selectCharacter(player, name, img);
@@ -1440,7 +1489,8 @@ function botThink(now) {
 
     // The bot does not use the human keyboard. It gets a lightweight decision loop.
     if (now < botNextThink) return;
-    botNextThink = now + 90;
+    const cfg = BOT_LEVELS[botDifficulty] || BOT_LEVELS.hard;
+    botNextThink = now + cfg.think;
 
     const dx = enemy.x - bot.x;
     const absDx = Math.abs(dx);
@@ -1476,36 +1526,36 @@ function botThink(now) {
 
     // Jump when the enemy is above/below on a platform, or occasionally to vary movement.
     if (now >= botJumpUntil &&
-        ((enemy.y < bot.y - 80 && Math.random() < 0.65) ||
-         (bot.onGround && Math.random() < 0.045))) {
+        ((enemy.y < bot.y - 80 && Math.random() < cfg.chaseJump) ||
+         (bot.onGround && Math.random() < cfg.randJump))) {
         jump(2);
         botJumpUntil = now + 900;
     }
 
     // Dash occasionally while closing distance.
-    if (absDx > 260 && Math.random() < 0.18) {
+    if (absDx > 260 && Math.random() < cfg.dash) {
         dash(2);
     }
 
     // Attack when in range, or shoot when the character is ranged.
     if (now >= botNextAttack) {
-        const attackRange = data.ranged ? 520 : REACH_ATTACK + 25;
+        const attackRange = data.ranged ? 520 : REACH_ATTACK + cfg.rangeBonus;
         if (absDx <= attackRange) {
-            attack(2);
-            botNextAttack = now + Math.max(420, data.cooldown * 0.72);
+            if (Math.random() >= cfg.miss) attack(2);
+            botNextAttack = now + Math.max(cfg.attackMin, data.cooldown * cfg.attackMul);
         }
     }
 
     // Use special as soon as it is useful.
     if (bot.specialReady && now >= botNextAction) {
         if (absDx < 650 || data.special === "collinSpeed") {
-            special(2);
-            botNextAction = now + 900;
+            if (Math.random() < cfg.specialChance) special(2);
+            botNextAction = now + cfg.specialDelay;
         }
     }
 
     // Occasionally block when close to the enemy.
-    if (absDx < 300 && Math.random() < 0.08) {
+    if (absDx < 300 && Math.random() < cfg.block) {
         block(2);
     }
 }
