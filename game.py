@@ -1,12 +1,13 @@
 # Beispiel – NUR die markierten Teile in deine echte app.py übernehmen!
 # Bot- und 1v1-Modus laufen auch dann, wenn flask-socketio nicht installiert ist.
+from flask import Flask, render_template
 from flask_socketio import SocketIO
 from online import register_online
 
-socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
-register_online(socketio)
+app = Flask(__name__)                      # 1. zuerst die App anlegen
 
-app = Flask(__name__)
+socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")   # 2. danach SocketIO
+register_online(socketio)
 
 # --- Online-Modus (optional) ---
 try:
