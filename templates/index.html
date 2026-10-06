@@ -5,6 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>1v1 Battle</title>
 
+    <script>
+    // Diagnose-Anzeige: zeigt JavaScript-Fehler und fehlende Dateien direkt auf der Seite
+    (function() {
+        var box = null;
+        function show(text) {
+            if (!document.body) { document.addEventListener("DOMContentLoaded", function() { show(text); }); return; }
+            if (!box) {
+                box = document.createElement("div");
+                box.style.cssText = "position:fixed;left:0;right:0;bottom:0;max-height:45vh;overflow:auto;" +
+                    "z-index:99999;background:#8a1111;color:#fff;font:13px/1.4 monospace;padding:10px 14px;" +
+                    "white-space:pre-wrap;border-top:3px solid #ff6b6b;cursor:pointer";
+                box.title = "Klicken zum Schließen";
+                box.onclick = function() { box.remove(); box = null; };
+                box.textContent = "FEHLER (bitte Screenshot oder Text schicken):\n";
+                document.body.appendChild(box);
+            }
+            if (box.textContent.length < 4000) box.textContent += "\n• " + text;
+        }
+        window.addEventListener("error", function(e) {
+            if (e.target && e.target !== window && (e.target.src || e.target.href)) {
+                var src = e.target.src || e.target.href;
+                if (/\/charactere\/|\/attacken\/|\/BBBB\/|Hintergrund/.test(src) || /style\.css|socket\.io/.test(src)) {
+                    show("Datei nicht geladen: " + src);
+                }
+                return;
+            }
+            show((e.message || "Fehler") + "  [" + String(e.filename || "").split("/").pop() + ":" + e.lineno + "]");
+        }, true);
+        window.addEventListener("unhandledrejection", function(e) {
+            show("Promise-Fehler: " + (e.reason && e.reason.message ? e.reason.message : e.reason));
+        });
+    })();
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <link rel="stylesheet"
           href="{{ url_for('static', filename='style.css') }}">
@@ -12,6 +45,8 @@
 
 <body>
 
+
+<div id="build-tag" style="position:fixed;right:8px;bottom:6px;z-index:5;font:11px monospace;color:#777;pointer-events:none">Build: Online + Schwierigkeit v3</div>
 
 <div id="character-select">
 
