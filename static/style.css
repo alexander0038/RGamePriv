@@ -83,18 +83,22 @@ button:active { transform: scale(0.97); }
     height: 115px;
     padding: 5px;
     object-fit: contain;
-    background: #292929;
-    border: 3px solid transparent;
+    --c: #888;
+    background: color-mix(in srgb, var(--c) 32%, #1c1c1c);
+    border: 3px solid color-mix(in srgb, var(--c) 55%, transparent);
     border-radius: 12px;
     cursor: pointer;
     transition: transform 0.15s, border-color 0.15s, background 0.15s;
 }
 
-.character-option:hover { transform: scale(1.08); background: #383838; }
+.character-option:hover {
+    transform: scale(1.08);
+    background: color-mix(in srgb, var(--c) 50%, #1c1c1c);
+}
 
 .character-option.selected {
     border-color: #00ff66;
-    background: #183b25;
+    background: color-mix(in srgb, var(--c) 65%, #1c1c1c);
     transform: scale(1.08);
     box-shadow: 0 0 20px rgba(0,255,100,0.3);
 }
@@ -708,3 +712,17 @@ button:active { transform: scale(0.97); }
         drop-shadow(0 0 12px #ffe066)
         drop-shadow(0 7px 5px rgba(0,0,0,0.5));
 }
+
+
+#difficulty-select {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: -8px 0 22px;
+}
+
+.diff-button { min-width: 130px; padding: 10px 18px; }
+
+#diff-easy.active   { background: #1b7a3a; border-color: #4cff85; }
+#diff-medium.active { background: #9a7410; border-color: #ffd34d; }
+#diff-hard.active   { background: #8a1c1c; border-color: #ff5a5a; }
