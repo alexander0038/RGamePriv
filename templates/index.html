@@ -217,6 +217,9 @@ const SPEED_SCALE = 1.45;
 const COYOTE_TIME = 110;
 const JUMP_BUFFER = 130;
 const BODY_PUSH_DIST = 80;
+const SLIPPERY_TIME = 5000;
+const SLIPPERY_ACCEL = 0.06;
+const SLIPPERY_FRICTION = 0.97;
 const BLOCK_TIME = 450;
 const PARRY_WINDOW = 180;
 const BLOCK_COOLDOWN = 1300;
@@ -268,32 +271,38 @@ const IMG_BG = "{{ url_for('static', filename='Hintergrund/hintergrund.png') }}"
 const characters = {
 
     Elia: {
-        hp: 100, speed: 3.2, damage: 15, cooldown: 1500,
+        hp: 100, speed: 3.2, damage: 15, cooldown: 1400,
         attack: "EliaSchlag", special: "precision",
-        critChance: 0.1
+        critChance: 0.2
     },
 
     Toni: {
-        hp: 80, speed: 3.8, damage: 8, cooldown: 900,
+        hp: 80, speed: 3.8, damage: 8, cooldown: 1000,
         attack: "ToniKlatsche", special: "complain",
-        doubleJump: true, ranged: true, projectileSpeed: 18
+        doubleJump: true, ranged: true, projectileSpeed: 12
     },
 
     Alex: {
-        hp: 100, speed: 3.3, damage: 12.5, cooldown: 1000,
+        hp: 100, speed: 3.2, damage: 12.5, cooldown: 1000,
         attack: "AlexTritt", special: "kick"
     },
 
     HenningPrime: {
-        hp: 80, speed: 4, damage: 10, cooldown: 750,
+        hp: 80, speed: 3.8, damage: 10, cooldown: 750,
         attack: "HenningKratzer", special: "teleport",
         doubleJump: true
     },
 
     MaxH: {
-        hp: 120, speed: 2.8, damage: 17.5, cooldown: 1300,
+        hp: 120, speed: 2.8, damage: 15, cooldown: 1500,
         attack: "MaxBauchStoss", special: "push",
         superarmor: true
+    },
+
+    Fabian: {
+        hp: 100, speed: 3.2, damage: 12.5, cooldown: 1000,
+        attack: "FabianButter", special: "slippery",
+        ranged: true, projectileSpeed: 12
     }
 
 };
@@ -349,7 +358,10 @@ function createPlayer() {
         dashDir: 1,
         lastGrounded: 0,
         jumpBufferUntil: 0,
-        jumpHeld: false
+        jumpHeld: false,
+
+        slipperyUntil: 0,
+        sx: 0
     };
 
 }
@@ -1291,6 +1303,31 @@ function move(player, dt) {
 
     if (now < p.reverseUntil) dx = -dx;
 
+
+    if (now < p.slipperyUntil) {
+
+        const maxV = dt > 0 ? speed / dt : 0;
+
+        p.sx += dx * maxV * SLIPPERY_ACCEL * dt;
+        p.sx *= Math.pow(SLIPPERY_FRICTION, dt);
+        p.sx = Math.max(-maxV * 1.1, Math.min(maxV * 1.1, p.sx));
+
+        if (dx !== 0) p.facing = dx;
+
+        p.x += p.sx * dt;
+
+        const before = p.x;
+
+        clampX(p);
+
+        if (p.x !== before) p.sx = 0;
+
+        return;
+
+    }
+
+    p.sx = 0;
+
     if (dx !== 0) {
         p.x += dx * speed;
         p.facing = dx;
@@ -2000,6 +2037,20 @@ function special(player) {
     }
 
 
+    else if (data.special === "slippery") {
+
+        consumeSpecial(p);
+        sfx("special");
+
+        enemy.slipperyUntil = Date.now() + SLIPPERY_TIME;
+        enemy.sx = 0;
+
+        floatText(enemy.x, enemy.y - PLAYER_H, "RUTSCHIG!", "info");
+        burst(enemy.x, enemy.y, 16, "#ffe066", 100, 10);
+
+    }
+
+
     else if (data.special === "kick") {
 
         if (inReach(p, enemy, REACH_SPECIAL)) {
@@ -2504,6 +2555,7 @@ function updatePositions() {
         el.classList.toggle("enraged", p.hp > 0 && p.hp <= p.maxHp * RAGE_THRESHOLD);
         el.classList.toggle("hit-flash", now < p.flashUntil);
         el.classList.toggle("stunned", now < p.disabledUntil);
+        el.classList.toggle("slippery", now < p.slipperyUntil);
 
 
         $("player" + player + "-img").style.transform =
@@ -2525,6 +2577,7 @@ function effectsText(p) {
     if (now < p.shieldUntil) parts.push("🛡️ " + left(p.shieldUntil));
     if (now < p.poisonUntil) parts.push("☠️ " + left(p.poisonUntil));
     if (now < p.reverseUntil) parts.push("🔄 " + left(p.reverseUntil));
+    if (now < p.slipperyUntil) parts.push("🧈 " + left(p.slipperyUntil));
     if (p.hp > 0 && p.hp <= p.maxHp * RAGE_THRESHOLD) parts.push("🔥 WUT");
 
     return parts.join("   ");
