@@ -3222,10 +3222,25 @@ function netConnect(cb) {
 
         netSocket.on("msg", netOnMessage);
 
+        netSocket.on("connect_error", function(err) {
+            console.error("Socket.IO connect_error:", err);
+            netStatus("Verbindung zum Server fehlgeschlagen: " + (err && err.message ? err.message : err) +
+                      "  (Details: F12 → Konsole)");
+        });
+
     }
 
-    if (netSocket.connected) cb();
-    else netSocket.once("connect", cb);
+    if (netSocket.connected) {
+        cb();
+    } else {
+        netSocket.once("connect", cb);
+        setTimeout(function() {
+            if (!netSocket.connected) {
+                netStatus("Keine Antwort vom Server. Läuft er mit socketio.run(...)? " +
+                          "Teste: /socket.io/?EIO=4&transport=polling im Browser öffnen.");
+            }
+        }, 5000);
+    }
 
 }
 
