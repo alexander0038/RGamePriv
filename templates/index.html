@@ -220,6 +220,14 @@ const BODY_PUSH_DIST = 80;
 const SLIPPERY_TIME = 5000;
 const SLIPPERY_ACCEL = 0.06;
 const SLIPPERY_FRICTION = 0.97;
+const ARC_THROW_VY = -17;
+const ARC_GRAVITY = 0.5;
+const ARC_MIN_VX = 4;
+const ARC_MAX_VX = 12;
+const ARC_DEFAULT_VX = 9;
+const PAINT_BRUSHES = 5;
+const PAINT_RANGE = 320;
+const PAINT_DAMAGE = 6;
 const BLOCK_TIME = 450;
 const PARRY_WINDOW = 180;
 const BLOCK_COOLDOWN = 1300;
@@ -303,6 +311,12 @@ const characters = {
         hp: 90, speed: 3.0, damage: 10, cooldown: 1000,
         attack: "FabianButter", special: "slippery",
         ranged: true, projectileSpeed: 11
+    },
+
+    Isabella: {
+        hp: 90, speed: 3.4, damage: 14, cooldown: 1300,
+        attack: "IsabellaPinsel", special: "paintstorm",
+        ranged: true, arc: true
     }
 
 };
@@ -1603,35 +1617,65 @@ function showAttack(player) {
 }
 
 
+function spawnBrush(owner, x, y, vx, vy, gravity, damage, spin) {
+
+    const el = document.createElement("img");
+
+    el.className = "projectile";
+    el.src = IMG_ATTACK + characters[players[owner].character].attack + ".png";
+    el.style.left = x + "px";
+    el.style.top = y + "px";
+
+    $("fx").appendChild(el);
+
+    const pr = {
+        owner: owner,
+        x: x,
+        y: y,
+        vx: vx,
+        vy: vy,
+        gravity: gravity,
+        spin: spin,
+        rot: 0,
+        dir: vx < 0 ? -1 : 1,
+        damage: damage,
+        el: el,
+        born: Date.now()
+    };
+
+    el.style.transform = `translate(-50%, -50%) scaleX(${pr.dir})`;
+
+    projectiles.push(pr);
+
+}
+
 function shootProjectile(player) {
 
     const p = players[player];
+    const enemy = players[otherPlayer(player)];
     const data = characters[p.character];
 
     const dir = p.facing;
     const x = p.x + dir * ATTACK_OFFSET;
     const y = p.y - PLAYER_H / 2;
 
-    const el = document.createElement("img");
+    if (data.arc) {
 
-    el.className = "projectile";
-    el.src = IMG_ATTACK + data.attack + ".png";
-    el.style.setProperty("--dir", dir);
-    el.style.left = x + "px";
-    el.style.top = y + "px";
+        const flightFrames = 2 * Math.abs(ARC_THROW_VY) / ARC_GRAVITY;
+        const ahead = (enemy.x - p.x) * dir;
 
-    $("fx").appendChild(el);
+        const vx =
+            ahead > 60
+                ? Math.max(ARC_MIN_VX, Math.min(ARC_MAX_VX, (ahead - ATTACK_OFFSET) / flightFrames))
+                : ARC_DEFAULT_VX;
 
-    projectiles.push({
-        owner: player,
-        x: x,
-        y: y,
-        dir: dir,
-        speed: data.projectileSpeed || 12,
-        damage: data.damage,
-        el: el,
-        born: Date.now()
-    });
+        spawnBrush(player, x, y, dir * vx, ARC_THROW_VY, ARC_GRAVITY, data.damage, 16);
+
+    } else {
+
+        spawnBrush(player, x, y, dir * (data.projectileSpeed || 12), 0, 0, data.damage, 0);
+
+    }
 
     sfx("shoot");
 
@@ -1650,17 +1694,29 @@ function updateProjectiles(dt) {
 
     projectiles.forEach(function(pr) {
 
-        pr.x += pr.dir * pr.speed * dt;
+        pr.vy += pr.gravity * dt;
+        pr.x += pr.vx * dt;
+        pr.y += pr.vy * dt;
+        pr.rot += pr.spin * dt;
+
         pr.el.style.left = pr.x + "px";
+        pr.el.style.top = pr.y + "px";
+        pr.el.style.transform =
+            `translate(-50%, -50%) scaleX(${pr.dir}) rotate(${pr.rot}deg)`;
 
         const enemy = players[otherPlayer(pr.owner)];
 
         const d = Math.hypot(pr.x - enemy.x, pr.y - (enemy.y - PLAYER_H / 2));
 
+        const hitGround =
+            pr.gravity > 0 && pr.y > level.groundTop && overGround(pr.x);
+
         const gone =
+            hitGround ||
             pr.x < -150 ||
             pr.x > level.width + 150 ||
-            Date.now() - pr.born > 3000;
+            pr.y > level.groundTop + GROUND_H + 150 ||
+            Date.now() - pr.born > 4000;
 
         if (fighting && d <= PROJECTILE_RADIUS) {
 
@@ -1673,6 +1729,10 @@ function updateProjectiles(dt) {
             });
 
         } else if (gone) {
+
+            if (hitGround) {
+                burst(pr.x, level.groundTop, 8, "#ff7ad9", 70, 9);
+            }
 
             pr.el.remove();
 
@@ -2047,6 +2107,34 @@ function special(player) {
 
         floatText(enemy.x, enemy.y - PLAYER_H, "RUTSCHIG!", "info");
         burst(enemy.x, enemy.y, 16, "#ffe066", 100, 10);
+
+    }
+
+
+    else if (data.special === "paintstorm") {
+
+        consumeSpecial(p);
+        sfx("special");
+
+        for (let i = 0; i < PAINT_BRUSHES; i++) {
+
+            const offset = (Math.random() * 2 - 1) * PAINT_RANGE;
+
+            spawnBrush(
+                player,
+                enemy.x + offset,
+                -60 - i * 90,
+                0,
+                6,
+                ARC_GRAVITY,
+                PAINT_DAMAGE,
+                12
+            );
+
+        }
+
+        floatText(enemy.x, enemy.y - PLAYER_H - 40, "FARBREGEN!", "combo");
+        shake(5, 200);
 
     }
 
