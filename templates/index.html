@@ -46,7 +46,7 @@
 <body>
 
 
-<div id="build-tag" style="position:fixed;right:8px;bottom:6px;z-index:5;font:11px monospace;color:#777;pointer-events:none">Build: Online + Schwierigkeit v3</div>
+<div id="build-tag" style="position:fixed;right:8px;bottom:6px;z-index:5;font:11px monospace;color:#777;pointer-events:none">Build: Online + Schwierigkeit v5</div>
 
 <div id="character-select">
 
@@ -470,7 +470,7 @@ let botDifficulty = "hard";
 // ===== ONLINE: globale Zustände =====
 const VIRTUAL_W = 1920;
 const VIRTUAL_H = 1080;
-const NET_SEND_MS = 33;
+const NET_SEND_MS = 40;
 const NET_P2KEYS = ["j", "l", "i", "k", "o", "p", "u"];
 const NET_KEYMAP = { a: "j", d: "l", w: "i", s: "k", e: "o", r: "p", q: "u" };
 const NET_TIME_FIELDS = /Until$|^last|^blockStart$|^blockReadyAt$/;
@@ -3224,7 +3224,7 @@ function netConnect(cb) {
 
     if (!netSocket) {
 
-        netSocket = io();
+        netSocket = io({ transports: ["websocket", "polling"] });
 
         netSocket.on("room_created", function(d) {
             netRole = "host";
@@ -3257,6 +3257,11 @@ function netConnect(cb) {
 
         netSocket.on("msg", netOnMessage);
 
+        netSocket.on("connect", function() {
+            if (!netRole) netStatus("Verbunden mit dem Server …");
+            netStartPing();
+        });
+
         netSocket.on("connect_error", function(err) {
             console.error("Socket.IO connect_error:", err);
             netStatus("Verbindung zum Server fehlgeschlagen: " + (err && err.message ? err.message : err) +
@@ -3271,7 +3276,7 @@ function netConnect(cb) {
         netSocket.once("connect", cb);
         setTimeout(function() {
             if (!netSocket.connected) {
-                netStatus("Keine Antwort vom Server. Läuft er mit socketio.run(...)? " +
+                netStatus("Keine Verbindung zum Server (" + netDiag() + "). " +
                           "Teste: /socket.io/?EIO=4&transport=polling im Browser öffnen.");
             }
         }, 5000);
@@ -3279,10 +3284,71 @@ function netConnect(cb) {
 
 }
 
+let netPing = null;
+let netPingTimer = null;
+let netBadge = null;
+
+function netTransportName() {
+    try { return netSocket.io.engine.transport.name; } catch (e) { return "?"; }
+}
+
+function netUpdateBadge() {
+
+    if (!document.body || !netRole) return;
+
+    if (!netBadge) {
+        netBadge = document.createElement("div");
+        netBadge.style.cssText = "position:fixed;left:8px;bottom:6px;z-index:50;font:12px monospace;" +
+            "color:#ddd;background:rgba(0,0,0,0.55);padding:3px 8px;border-radius:6px;pointer-events:none";
+        document.body.appendChild(netBadge);
+    }
+
+    const ok = netPing !== null && netPing >= 0;
+    const color = !ok ? "#ff6b6b" : netPing < 60 ? "#5cff8a" : netPing < 130 ? "#ffd34d" : "#ff6b6b";
+
+    netBadge.style.color = color;
+    netBadge.textContent = "ONLINE • Ping " + (ok ? netPing + " ms" : "?") + " • " + netTransportName();
+
+}
+
+function netStartPing() {
+
+    if (netPingTimer) return;
+
+    netPingTimer = setInterval(function() {
+
+        if (!netSocket || !netSocket.connected) return;
+
+        const t = Date.now();
+
+        netSocket.timeout(2000).emit("ping_t", function(err) {
+            netPing = err ? -1 : Date.now() - t;
+            netUpdateBadge();
+        });
+
+    }, 2000);
+
+}
+
+function netDiag() {
+    let transport = "?";
+    try { transport = netSocket.io.engine.transport.name; } catch (e) {}
+    return "verbunden=" + (netSocket ? netSocket.connected : "nein") + ", Transport=" + transport;
+}
+
+function netReplyGuard(what) {
+    setTimeout(function() {
+        if (!netRole && /^Verbinde|^Verbunden/.test($("online-status").textContent)) {
+            netStatus("Server antwortet nicht auf '" + what + "' (" + netDiag() + "). " +
+                      "Render-Log und Start-Command prüfen.");
+        }
+    }, 5000);
+}
+
 function netCreateRoom() {
     if (gameMode !== "online" || netRole) return;
     netStatus("Verbinde …");
-    netConnect(function() { netSocket.emit("create"); });
+    netConnect(function() { netSocket.emit("create"); netReplyGuard("Raum erstellen"); });
 }
 
 function netJoinRoom() {
@@ -3290,7 +3356,7 @@ function netJoinRoom() {
     const code = $("room-code").value.trim().toUpperCase();
     if (code.length !== 4) { netStatus("Bitte den 4-stelligen Code eingeben."); return; }
     netStatus("Verbinde …");
-    netConnect(function() { netSocket.emit("join", { code: code }); });
+    netConnect(function() { netSocket.emit("join", { code: code }); netReplyGuard("Beitreten"); });
 }
 
 function netEnterSelect() {
@@ -3419,7 +3485,8 @@ function netBuildSnapshot() {
         const p = players[n];
         const o = {};
         NET_PFIELDS.forEach(function(f) {
-            o[f] = NET_TIME_FIELDS.test(f) ? p[f] - now : p[f];
+            const v = NET_TIME_FIELDS.test(f) ? p[f] - now : p[f];
+            o[f] = (f === "x" || f === "y") ? Math.round(v) : v;
         });
         pl[n] = o;
     });
@@ -3432,13 +3499,13 @@ function netBuildSnapshot() {
         rs: roundStart - now,
         sd: suddenDeath ? 1 : 0,
         it: items.map(function(i) {
-            return { u: i.uid, id: i.type.id, ic: i.type.icon, x: i.x, y: i.y, a: now - i.spawnedAt };
+            return { u: i.uid, id: i.type.id, ic: i.type.icon, x: Math.round(i.x), y: Math.round(i.y), a: now - i.spawnedAt };
         }),
         hz: hazards.map(function(h) {
-            return { u: h.uid, k: h.kind, x: h.x, y: h.y, a: now - h.born };
+            return { u: h.uid, k: h.kind, x: Math.round(h.x), y: Math.round(h.y), a: now - h.born };
         }),
         pr: projectiles.map(function(r) {
-            return { u: r.uid, x: r.x, y: r.y, d: r.dir, r: r.rot, o: r.owner };
+            return { u: r.uid, x: Math.round(r.x), y: Math.round(r.y), d: r.dir, r: Math.round(r.rot), o: r.owner };
         }),
         ev: netEvents
     };
@@ -3536,6 +3603,7 @@ function netApplySnapshot(s) {
     });
 
     (s.ev || []).forEach(function(e) {
+        if (e[0] === "burst" && $("fx").children.length > 60) return;
         const fn = NET_ORIG[e[0]] || NET_CUSTOM[e[0]];
         if (fn) fn.apply(null, e[1]);
     });
