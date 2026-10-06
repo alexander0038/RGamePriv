@@ -16,7 +16,12 @@
 
     <h1>1V1 BATTLE</h1>
 
-    <p class="hint">Best of 3 &bull; M = Ton an/aus</p>
+    <div id="mode-select">
+        <button id="mode-1v1" class="mode-button active" onclick="setGameMode('1v1')">1V1 SPIELER</button>
+        <button id="mode-bot" class="mode-button" onclick="setGameMode('bot')">GEGEN BOT</button>
+    </div>
+
+    <p id="mode-hint" class="hint">Best of 3 &bull; M = Ton an/aus</p>
 
     <div class="players">
 
@@ -314,9 +319,14 @@ const characters = {
     },
 
     Isabella: {
-        hp: 90, speed: 3.0, damage: 10, cooldown: 1200,
+        hp: 90, speed: 3.4, damage: 14, cooldown: 1300,
         attack: "IsabellaPinsel", special: "paintstorm",
         ranged: true, arc: true
+    },
+
+    Collin: {
+        hp: 100, speed: 3.3, damage: 12, cooldown: 950,
+        attack: "CollinAngriff", special: "collinSpeed"
     }
 
 };
@@ -367,6 +377,7 @@ function createPlayer() {
         flashUntil: 0,
         springUntil: 0,
         teleportUntil: 0,
+        collinUltUntil: 0,
 
         dashUntil: 0,
         dashDir: 1,
@@ -399,6 +410,16 @@ let selected1 = null;
 let selected2 = null;
 let ready1 = false;
 let ready2 = false;
+
+let gameMode = "1v1";
+let botNextThink = 0;
+let botNextAttack = 0;
+let botNextAction = 0;
+let botJumpUntil = 0;
+
+const COLLIN_ULT_TIME = 7000;
+const COLLIN_ULT_SPEED = 1.55;
+const COLLIN_ULT_SCALE = 0.78;
 
 let gameStarted = false;
 let fighting = false;
@@ -724,6 +745,33 @@ document.addEventListener("visibilitychange", function() {
 });
 
 
+function setGameMode(mode) {
+    if (ready1 || ready2 || gameStarted) return;
+
+    gameMode = mode;
+
+    $("mode-1v1").classList.toggle("active", mode === "1v1");
+    $("mode-bot").classList.toggle("active", mode === "bot");
+
+    const p2 = document.querySelector(".player-select:nth-child(2)");
+    if (p2) {
+        p2.classList.toggle("bot-mode", mode === "bot");
+    }
+
+    $("mode-hint").textContent =
+        mode === "bot"
+            ? "GEGEN BOT • Spieler 1 steuert • Bot wählt automatisch einen Charakter"
+            : "Best of 3 • M = Ton an/aus";
+
+    const title2 = document.querySelector("#characters-p2").previousElementSibling;
+    if (title2) title2.textContent = mode === "bot" ? "BOT" : "SPIELER 2";
+}
+
+function chooseBotCharacter() {
+    const names = Object.keys(characters);
+    return names[Math.floor(Math.random() * names.length)];
+}
+
 function createCharacterButtons() {
 
     [1, 2].forEach(function(player) {
@@ -772,6 +820,8 @@ function readyPlayer(player) {
 
     initAudio();
 
+    if (gameMode === "bot" && player === 2) return;
+
     const chosen = player === 1 ? selected1 : selected2;
 
     if (!chosen) {
@@ -789,10 +839,33 @@ function readyPlayer(player) {
     label.textContent = isReady ? "BEREIT!" : "NICHT BEREIT";
     label.classList.toggle("ready-active", isReady);
 
+    if (gameMode === "bot" && player === 1 && ready1) {
+        startBotIfReady();
+        return;
+    }
+
     if (ready1 && ready2) {
         startGame();
     }
 
+}
+
+function startBotIfReady() {
+    if (gameMode !== "bot" || !selected1 || !ready1) return;
+
+    selected2 = chooseBotCharacter();
+    ready2 = true;
+
+    $("selected-name2").textContent = selected2;
+    $("ready2").textContent = "BOT BEREIT";
+    $("ready2").classList.add("ready-active");
+
+    document.querySelectorAll("#characters-p2 .character-option").forEach(function(el) {
+        el.classList.remove("selected");
+        if (el.title === selected2) el.classList.add("selected");
+    });
+
+    startGame();
 }
 
 
@@ -996,7 +1069,7 @@ async function startGame() {
     players[2].character = selected2;
 
     $("name1").textContent = selected1;
-    $("name2").textContent = selected2;
+    $("name2").textContent = gameMode === "bot" ? "BOT • " + selected2 : selected2;
 
     $("player1-img").src = IMG_CHAR + selected1 + ".png";
     $("player2-img").src = IMG_CHAR + selected2 + ".png";
@@ -1033,6 +1106,11 @@ function resetRound() {
 
     const now = Date.now();
     const chars = { 1: selected1, 2: selected2 };
+
+    botNextThink = now + 400;
+    botNextAttack = now + 800;
+    botNextAction = now + 1200;
+    botJumpUntil = now + 700;
 
     [1, 2].forEach(function(n) {
 
@@ -1282,6 +1360,7 @@ function move(player, dt) {
     let speed = characters[p.character].speed * SPEED_SCALE * dt;
 
     if (now < p.speedUntil) speed *= SPEED_BOOST;
+    if (p.character === "Collin" && now < p.collinUltUntil) speed *= COLLIN_ULT_SPEED;
 
 
     if (now < p.fleeUntil) {
@@ -1351,6 +1430,85 @@ function move(player, dt) {
 
 }
 
+
+function botThink(now) {
+    if (gameMode !== "bot" || !fighting) return;
+
+    const bot = players[2];
+    const enemy = players[1];
+    if (!bot || !enemy || bot.hp <= 0) return;
+
+    // The bot does not use the human keyboard. It gets a lightweight decision loop.
+    if (now < botNextThink) return;
+    botNextThink = now + 90;
+
+    const dx = enemy.x - bot.x;
+    const absDx = Math.abs(dx);
+    const dir = Math.sign(dx) || bot.facing || -1;
+    bot.facing = dir;
+
+    // Clear bot movement keys and decide a new direction.
+    keys["j"] = false;
+    keys["l"] = false;
+
+    if (now < bot.disabledUntil || now < bot.blockUntil || now < bot.rootedUntil) return;
+
+    // Keep some distance for ranged characters, otherwise approach.
+    const data = characters[bot.character];
+    let desired = data.ranged ? 430 : 145;
+
+    if (absDx > desired + 55) {
+        if (dir < 0) keys["j"] = true;
+        else keys["l"] = true;
+    } else if (absDx < desired - 65) {
+        if (dir < 0) keys["l"] = true;
+        else keys["j"] = true;
+    }
+
+    // Avoid walking straight into the center pit.
+    const nearPit = Math.abs(bot.x - (level.pit.left + level.pit.right) / 2) <
+        (level.pit.right - level.pit.left) / 2 + 45;
+    if (nearPit && bot.onGround) {
+        const escapeDir = bot.x < (level.pit.left + level.pit.right) / 2 ? -1 : 1;
+        keys["j"] = escapeDir < 0;
+        keys["l"] = escapeDir > 0;
+    }
+
+    // Jump when the enemy is above/below on a platform, or occasionally to vary movement.
+    if (now >= botJumpUntil &&
+        ((enemy.y < bot.y - 80 && Math.random() < 0.65) ||
+         (bot.onGround && Math.random() < 0.045))) {
+        jump(2);
+        botJumpUntil = now + 900;
+    }
+
+    // Dash occasionally while closing distance.
+    if (absDx > 260 && Math.random() < 0.18) {
+        dash(2);
+    }
+
+    // Attack when in range, or shoot when the character is ranged.
+    if (now >= botNextAttack) {
+        const attackRange = data.ranged ? 520 : REACH_ATTACK + 25;
+        if (absDx <= attackRange) {
+            attack(2);
+            botNextAttack = now + Math.max(420, data.cooldown * 0.72);
+        }
+    }
+
+    // Use special as soon as it is useful.
+    if (bot.specialReady && now >= botNextAction) {
+        if (absDx < 650 || data.special === "collinSpeed") {
+            special(2);
+            botNextAction = now + 900;
+        }
+    }
+
+    // Occasionally block when close to the enemy.
+    if (absDx < 300 && Math.random() < 0.08) {
+        block(2);
+    }
+}
 
 function applyPhysics(p, dt) {
 
@@ -2156,6 +2314,20 @@ function special(player) {
 
     }
 
+
+    else if (data.special === "collinSpeed") {
+
+        consumeSpecial(p);
+        sfx("special");
+
+        p.collinUltUntil = Date.now() + COLLIN_ULT_TIME;
+
+        floatText(p.x, p.y - PLAYER_H, "COLLIN TURBO!", "combo");
+        burst(p.x, p.y - PLAYER_H / 2, 24, "#6fe7ff", 150, 11);
+        shake(4, 180);
+
+    }
+
 }
 
 
@@ -2637,6 +2809,10 @@ function updatePositions() {
         el.style.left = p.x + "px";
         el.style.top = p.y + "px";
 
+        const collinActive = p.character === "Collin" && now < p.collinUltUntil;
+        el.style.width = collinActive ? (180 * COLLIN_ULT_SCALE) + "px" : "180px";
+        el.style.height = collinActive ? (210 * COLLIN_ULT_SCALE) + "px" : "210px";
+
         el.classList.toggle("shielded", now < p.shieldUntil);
         el.classList.toggle("blocking", now < p.blockUntil);
         el.classList.toggle("parrying", now < p.blockUntil && now - p.blockStart <= PARRY_WINDOW);
@@ -2761,6 +2937,7 @@ function gameLoop(timestamp) {
     if (now >= hitstopUntil) {
 
         if (fighting) {
+            botThink(now);
             move(1, dt);
             move(2, dt);
         }
