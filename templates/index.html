@@ -345,16 +345,16 @@ const characters = {
     Toni: {
         hp: 90, speed: 3.8, damage: 8, cooldown: 800,
         attack: "ToniKlatsche", special: "complain",
-        doubleJump: true, ranged: true, projectileSpeed: 11
+        doubleJump: true, ranged: true, projectileSpeed: 12
     },
 
     Alex: {
         hp: 100, speed: 3.2, damage: 10.5, cooldown: 1000,
-        attack: "AlexTritt", special: "kick", critChance: 0.1
+        attack: "AlexTritt", special: "kick", critChance: 0.175
     },
 
     HenningPrime: {
-        hp: 85, speed: 3.8, damage: 10, cooldown: 650,
+        hp: 85, speed: 3.8, damage: 10, cooldown: 500,
         attack: "HenningKratzer", special: "teleport"
     },
 
@@ -371,7 +371,7 @@ const characters = {
     },
 
     Isabella: {
-        hp: 90, speed: 3.4, damage: 10, cooldown: 1300,
+        hp: 90, speed: 3.4, damage: 15, cooldown: 1200,
         attack: "IsabellaPinsel", special: "paintstorm",
         ranged: true, arc: true
     },
@@ -384,14 +384,15 @@ const characters = {
 
     // Jannes verwandelt sich mit seiner Ult in Luis (bis zum Rundenende)
     Jannes: {
-        hp: 100, speed: 3.2, damage: 12, cooldown: 1100,
-        attack: "JannesSteak", special: "transform", transformTo: "Luis"
+        hp: 105, speed: 3.2, damage: 11, cooldown: 900,
+        attack: "JannesSteak", special: "transform", transformTo: "Luis",
+        range: true, projectileSpeed: 13
     },
 
     // Nur die Verwandlungsform: erscheint nicht in der Charakterauswahl, hat keine Ult
     Luis: {
         hidden: true,
-        hp: 100, speed: 3.9, damage: 9, cooldown: 650,
+        hp: 90, speed: 3.6, damage: 8, cooldown: 650,
         attack: "LuisLaptop", special: null
     }
 
