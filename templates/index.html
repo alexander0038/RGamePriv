@@ -46,7 +46,7 @@
 <body>
 
 
-<div id="build-tag" style="position:fixed;right:8px;bottom:6px;z-index:5;font:11px monospace;color:#777;pointer-events:none">Build: Online + Schwierigkeit v5</div>
+<div id="build-tag" style="position:fixed;right:8px;bottom:6px;z-index:5;font:11px monospace;color:#777;pointer-events:none">Build: Online + Jannes/Luis v6</div>
 
 <div id="character-select">
 
@@ -343,18 +343,18 @@ const characters = {
     },
 
     Toni: {
-        hp: 90, speed: 3.8, damage: 8, cooldown: 850,
+        hp: 90, speed: 3.8, damage: 8, cooldown: 800,
         attack: "ToniKlatsche", special: "complain",
-        doubleJump: true, ranged: true, projectileSpeed: 14
+        doubleJump: true, ranged: true, projectileSpeed: 11
     },
 
     Alex: {
         hp: 100, speed: 3.2, damage: 10.5, cooldown: 1000,
-        attack: "AlexTritt", special: "kick", critChance: 0.2
+        attack: "AlexTritt", special: "kick", critChance: 0.1
     },
 
     HenningPrime: {
-        hp: 87.5, speed: 3.5, damage: 11, cooldown: 800,
+        hp: 85, speed: 3.8, damage: 10, cooldown: 650,
         attack: "HenningKratzer", special: "teleport"
     },
 
@@ -365,13 +365,13 @@ const characters = {
     },
 
     Fabian: {
-        hp: 110, speed: 3.2, damage: 10, cooldown: 1000,
+        hp: 90, speed: 3.2, damage: 10, cooldown: 1000,
         attack: "FabianButter", special: "slippery",
         ranged: true, projectileSpeed: 13
     },
 
     Isabella: {
-        hp: 85, speed: 3.4, damage: 15, cooldown: 1200,
+        hp: 90, speed: 3.4, damage: 10, cooldown: 1300,
         attack: "IsabellaPinsel", special: "paintstorm",
         ranged: true, arc: true
     },
@@ -380,6 +380,19 @@ const characters = {
         hp: 100, speed: 3.3, damage: 12, cooldown: 950,
         attack: "CollinAngriff", special: "collinSpeed",
         range: true, projectileSpeed: 12
+    },
+
+    // Jannes verwandelt sich mit seiner Ult in Luis (bis zum Rundenende)
+    Jannes: {
+        hp: 100, speed: 3.2, damage: 12, cooldown: 1100,
+        attack: "JannesSteak", special: "transform", transformTo: "Luis"
+    },
+
+    // Nur die Verwandlungsform: erscheint nicht in der Charakterauswahl, hat keine Ult
+    Luis: {
+        hidden: true,
+        hp: 100, speed: 3.9, damage: 9, cooldown: 650,
+        attack: "LuisLaptop", special: null
     }
 
 };
@@ -518,7 +531,8 @@ const CHARACTER_COLORS = {
     MaxH: "#2fae5b",
     Fabian: "#e8d23a",
     Isabella: "#e55aa8",
-    Collin: "#20b8c4"
+    Collin: "#20b8c4",
+    Jannes: "#b5651d"
 };
 let botNextThink = 0;
 let botNextAttack = 0;
@@ -914,7 +928,7 @@ function setDifficulty(level) {
 }
 
 function chooseBotCharacter() {
-    const names = Object.keys(characters);
+    const names = Object.keys(characters).filter(function(n) { return !characters[n].hidden; });
     return names[Math.floor(Math.random() * names.length)];
 }
 
@@ -925,6 +939,8 @@ function createCharacterButtons() {
         const container = $("characters-p" + player);
 
         Object.keys(characters).forEach(function(name) {
+
+            if (characters[name].hidden) return;
 
             const img = document.createElement("img");
 
@@ -1288,6 +1304,8 @@ function resetRound() {
         p.lastHeal = now;
 
         players[n] = p;
+
+        refreshLook(n);
 
     });
 
@@ -2240,7 +2258,7 @@ function damageEnemy(player, damage, opts) {
 
         if (attacker.hits >= 5) {
             attacker.hits = 5;
-            attacker.specialReady = true;
+            if (data.special) attacker.specialReady = true;
         }
 
 
@@ -2331,6 +2349,40 @@ function consumeSpecial(p) {
     p.hits = 0;
 }
 
+// Bild und Name passend zum aktuellen Charakter setzen
+function refreshLook(n) {
+
+    const p = players[n];
+
+    if (!p || !p.character) return;
+
+    const img = $("player" + n + "-img");
+
+    if (img._char !== p.character) {
+        img._char = p.character;
+        img.src = IMG_CHAR + p.character + ".png";
+    }
+
+    $("name" + n).textContent = (gameMode === "bot" && n === 2 ? "BOT • " : "") + p.character;
+
+}
+
+function transformPlayer(n, name) {
+
+    const p = players[n];
+
+    p.character = name;
+    p.lastAttack = 0;
+    p.flashUntil = Date.now() + 300;
+
+    refreshLook(n);
+
+    burst(p.x, p.y - PLAYER_H / 2, 26, "#ffd34d", 170, 11);
+    floatText(p.x, p.y - PLAYER_H - 20, name.toUpperCase() + "!", "combo");
+    shake(8, 260);
+
+}
+
 function special(player) {
 
     if (!fighting) return;
@@ -2343,6 +2395,8 @@ function special(player) {
 
     const enemy = players[otherPlayer(player)];
     const data = characters[p.character];
+
+    if (!data.special) return;
 
 
     if (data.special === "teleport") {
@@ -2486,6 +2540,16 @@ function special(player) {
             shake(7, 200);
 
         }
+
+    }
+
+
+    else if (data.special === "transform") {
+
+        consumeSpecial(p);
+        sfx("special");
+
+        transformPlayer(player, data.transformTo);
 
     }
 
@@ -3059,10 +3123,14 @@ function updateHUD() {
 
         $("hpghost" + n).style.width = ghostPct[n] + "%";
 
+        const hasSpecial = !p.character || !!(characters[p.character] || {}).special;
+
         $("special" + n).textContent =
-            p.specialReady
-                ? "SPEZIAL BEREIT! [" + (n === 1 ? "Q" : "U") + "]"
-                : `SPEZIAL: ${p.hits} / 5`;
+            !hasSpecial
+                ? "ULT BENUTZT"
+                : p.specialReady
+                    ? "SPEZIAL BEREIT! [" + (n === 1 ? "Q" : "U") + "]"
+                    : `SPEZIAL: ${p.hits} / 5`;
 
         $("effects" + n).textContent = effectsText(p);
 
@@ -3538,11 +3606,13 @@ function netApplySnapshot(s) {
     [1, 2].forEach(function(n) {
         const p = players[n];
         const o = s.pl[n];
+        const prevChar = p.character;
         NET_PFIELDS.forEach(function(f) {
             if (f === "x") p.tx = o.x;
             else if (f === "y") p.ty = o.y;
             else p[f] = NET_TIME_FIELDS.test(f) ? now + o[f] : o[f];
         });
+        if (p.character !== prevChar) refreshLook(n);
     });
 
     fighting = !!s.f;
