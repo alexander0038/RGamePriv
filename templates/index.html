@@ -46,7 +46,7 @@
 <body>
 
 
-<div id="build-tag" style="position:fixed;right:8px;bottom:6px;z-index:5;font:11px monospace;color:#777;pointer-events:none">Build: Online + Jannes/Luis v6</div>
+<div id="build-tag" style="position:fixed;right:8px;bottom:6px;z-index:5;font:11px monospace;color:#777;pointer-events:none">Build: Online + Jannes/Luis v7</div>
 
 <div id="character-select">
 
@@ -345,16 +345,16 @@ const characters = {
     Toni: {
         hp: 90, speed: 3.8, damage: 8, cooldown: 800,
         attack: "ToniKlatsche", special: "complain",
-        doubleJump: true, ranged: true, projectileSpeed: 12
+        doubleJump: true, ranged: true, projectileSpeed: 11
     },
 
     Alex: {
         hp: 100, speed: 3.2, damage: 10.5, cooldown: 1000,
-        attack: "AlexTritt", special: "kick", critChance: 0.175
+        attack: "AlexTritt", special: "kick", critChance: 0.1
     },
 
     HenningPrime: {
-        hp: 85, speed: 3.8, damage: 10, cooldown: 500,
+        hp: 85, speed: 3.8, damage: 10, cooldown: 650,
         attack: "HenningKratzer", special: "teleport"
     },
 
@@ -371,7 +371,7 @@ const characters = {
     },
 
     Isabella: {
-        hp: 90, speed: 3.4, damage: 15, cooldown: 1200,
+        hp: 90, speed: 3.4, damage: 10, cooldown: 1300,
         attack: "IsabellaPinsel", special: "paintstorm",
         ranged: true, arc: true
     },
@@ -382,9 +382,9 @@ const characters = {
         range: true, projectileSpeed: 12
     },
 
-    // Jannes verwandelt sich mit seiner Ult in Luis (bis zum Rundenende)
-        Jannes: {
-        hp: 105, speed: 3.2, damage: 12, cooldown: 900,
+    // Jannes wirft das Steak im Bogen und verwandelt sich mit seiner Ult in Luis (bis zum Rundenende)
+    Jannes: {
+        hp: 100, speed: 3.2, damage: 11, cooldown: 1000,
         attack: "JannesSteak", special: "transform", transformTo: "Luis",
         ranged: true, arc: true
     },
@@ -392,7 +392,7 @@ const characters = {
     // Nur die Verwandlungsform: erscheint nicht in der Charakterauswahl, hat keine Ult
     Luis: {
         hidden: true,
-        hp: 90, speed: 3.6, damage: 8, cooldown: 650,
+        hp: 100, speed: 3.9, damage: 9, cooldown: 650,
         attack: "LuisLaptop", special: null
     }
 
@@ -508,19 +508,16 @@ const netEls = { items: {}, hazards: {}, projs: {} };
 
 const BOT_LEVELS = {
     easy: {
-        think: 240, chaseJump: 0.2, randJump: 0.02, dash: 0.05,
-        attackMul: 1.7, attackMin: 950, rangeBonus: -45,
-        miss: 0.35, block: 0.01, specialDelay: 2500, specialChance: 0.5
+        react: 480, aim: 0.45, miss: 0.30, dodge: 0.35, parry: 0, block: 0.08,
+        dash: 0.10, kite: 0, items: 0.45, special: 0.5, specialDelay: 2200, dither: 0.35
     },
     medium: {
-        think: 150, chaseJump: 0.4, randJump: 0.03, dash: 0.11,
-        attackMul: 1.05, attackMin: 620, rangeBonus: 0,
-        miss: 0.15, block: 0.04, specialDelay: 1500, specialChance: 0.8
+        react: 260, aim: 0.80, miss: 0.10, dodge: 0.75, parry: 0.25, block: 0.30,
+        dash: 0.50, kite: 0.40, items: 0.80, special: 0.85, specialDelay: 1100, dither: 0.10
     },
     hard: {
-        think: 90, chaseJump: 0.65, randJump: 0.045, dash: 0.18,
-        attackMul: 0.72, attackMin: 420, rangeBonus: 25,
-        miss: 0, block: 0.08, specialDelay: 900, specialChance: 1
+        react: 110, aim: 1, miss: 0, dodge: 1, parry: 0.65, block: 0.55,
+        dash: 1, kite: 0.85, items: 1, special: 1, specialDelay: 350, dither: 0
     }
 };
 
@@ -535,10 +532,7 @@ const CHARACTER_COLORS = {
     Collin: "#20b8c4",
     Jannes: "#b5651d"
 };
-let botNextThink = 0;
-let botNextAttack = 0;
-let botNextAction = 0;
-let botJumpUntil = 0;
+let botMem = null;
 
 const COLLIN_ULT_TIME = 7000;
 const COLLIN_ULT_SPEED = 1.55;
@@ -1285,10 +1279,7 @@ function resetRound() {
     const now = Date.now();
     const chars = { 1: selected1, 2: selected2 };
 
-    botNextThink = now + 400;
-    botNextAttack = now + 800;
-    botNextAction = now + 1200;
-    botJumpUntil = now + 700;
+    botResetMemory(now);
 
     [1, 2].forEach(function(n) {
 
@@ -1623,85 +1614,1019 @@ function move(player, dt) {
 }
 
 
+// =====================================================================
+//  BOT-KI
+//  Wahrnehmung -> Reaktion (Projektile, Bomben, Nahkampf) -> Navigation
+//  (Boden, Plattformen, Grube) -> Positionierung -> Angriff / Spezial
+// =====================================================================
+
+function botResetMemory(now) {
+    botMem = {
+        lastNow: now,
+        foeX: null, foeVx: 0,
+        mySurf: "GR", foeSurf: "GL", goalSurf: null,
+        hop: null,
+        plans: new Map(),
+        defKey: -1, defSince: 0, defBlock: false, defDash: false,
+        kiteKey: -1, kiteOn: false,
+        inReachSince: 0,
+        nextSpecialAt: now + 1500,
+        nextJumpAt: 0, nextDropAt: 0,
+        idleUntil: 0, nextIdleRoll: now + 1000,
+        dir: 0
+    };
+}
+
+// ---------- Hilfsfunktionen: Welt ----------
+
+function botGroundSide(x) {
+    return x < (level.pit.left + level.pit.right) / 2 ? "GL" : "GR";
+}
+
+function botStanding(p) {
+    if (p.platform) {
+        const i = level.platforms.indexOf(p.platform);
+        if (i >= 0) return "P" + i;
+    }
+    return botGroundSide(p.x);
+}
+
+function botNodes() {
+    const nodes = {
+        GL: { id: "GL", left: 0, right: level.pit.left, top: level.groundTop, ground: true },
+        GR: { id: "GR", left: level.pit.right, right: level.width, top: level.groundTop, ground: true }
+    };
+    level.platforms.forEach(function(pl, i) {
+        nodes["P" + i] = { id: "P" + i, left: pl.left, right: pl.right, top: pl.top, ground: false };
+    });
+    return nodes;
+}
+
+function botItemSurface(it) {
+    if (Math.abs(it.surfaceY - level.groundTop) < 2) return botGroundSide(it.x);
+    for (let i = 0; i < level.platforms.length; i++) {
+        const pl = level.platforms[i];
+        if (Math.abs(pl.top - it.surfaceY) < 2 && it.x >= pl.left - 5 && it.x <= pl.right + 5) return "P" + i;
+    }
+    return null;
+}
+
+// Wo landet ein Spieler, wenn er mit konstanter Geschwindigkeit vx weiterfliegt?
+function botLanding(p, vx, maxFrames, now) {
+    let x = p.x, y = p.y, vy = p.vy, kx = p.kx || 0;
+    const minX = SIDE_MARGIN;
+    const maxX = Math.max(minX, level.width - SIDE_MARGIN);
+    const canPlat = now >= (p.dropUntil || 0);
+
+    for (let t = 1; t <= maxFrames; t++) {
+        const prevY = y;
+
+        x += kx;
+        kx *= 0.9;
+        if (Math.abs(kx) < 0.1) kx = 0;
+        x = Math.max(minX, Math.min(maxX, x + vx));
+
+        vy = Math.min(vy + GRAVITY, MAX_FALL);
+        y += vy;
+
+        if (vy >= 0) {
+            let best = -1;
+            if (canPlat) {
+                level.platforms.forEach(function(pl, i) {
+                    if (x + FOOT_HALF > pl.left && x - FOOT_HALF < pl.right &&
+                        prevY <= pl.top + 1 && y >= pl.top &&
+                        (best < 0 || pl.top < level.platforms[best].top)) best = i;
+                });
+            }
+            if (best >= 0) return { surf: "P" + best, x: x, y: level.platforms[best].top, t: t };
+
+            if (prevY <= level.groundTop + 1 && y >= level.groundTop && overGround(x)) {
+                return { surf: botGroundSide(x), x: x, y: level.groundTop, t: t };
+            }
+        }
+
+        if (y > level.groundTop + 1) return { surf: null, fall: true, x: x, y: y, t: t };
+    }
+
+    return null;
+}
+
+// Kann man sich in Richtung d bewegen, ohne abzustuerzen / die Plattform zu verlassen?
+function botCanWalk(me, d, px, now, allowOff, pitMargin) {
+    if (d === 0) return true;
+    const nx = me.x + d * px;
+    if (nx < SIDE_MARGIN + 4 || nx > level.width - SIDE_MARGIN - 4) return false;
+    if (!me.onGround) return true;
+    if (me.platform) {
+        if (allowOff) return true;
+        return nx + FOOT_HALF > me.platform.left + 12 && nx - FOOT_HALF < me.platform.right - 12;
+    }
+    const margin = Math.max(pitMargin || 12, now < me.slipperyUntil ? 140 : 12);
+    if (nx < level.pit.left - margin || nx > level.pit.right + margin) return true;
+    // schon in der Randzone: Schritte von der Grube weg sind immer erlaubt
+    const center = (level.pit.left + level.pit.right) / 2;
+    return d === (me.x < center ? -1 : 1);
+}
+
+// ---------- Navigation: Graph aus Boden-Haelften und Plattformen ----------
+
+function botBuildGraph(me, data, spd, nodes, now) {
+    const edges = [];
+    const ids = Object.keys(nodes);
+    const maxRise = data.doubleJump ? 520 : 335;
+    const v = -JUMP_SPEED;
+    const airTime = function(rise) {
+        return (v + Math.sqrt(Math.max(0, v * v - 2 * GRAVITY * rise))) / GRAVITY;
+    };
+    const pitW = level.pit.right - level.pit.left;
+
+    ids.forEach(function(a) {
+        ids.forEach(function(b) {
+            if (a === b) return;
+            const A = nodes[a], N = nodes[b];
+            const overlap = Math.min(A.right, N.right) - Math.max(A.left, N.left);
+            const gap = Math.max(0, -overlap);
+            const rise = A.top - N.top;
+
+            if (A.ground && N.ground) {
+                const need = pitW - 76 + spd;
+                if (!(now < me.slipperyUntil) && spd * airTime(0) >= need) {
+                    edges.push({ from: a, to: b, type: "pit", cost: 300 + pitW * 0.5, overlap: overlap, gap: gap, rise: 0 });
+                }
+            } else if (A.ground && !N.ground) {
+                if (rise <= maxRise && overlap >= 60) {
+                    edges.push({ from: a, to: b, type: "up", cost: 140, overlap: overlap, gap: 0, rise: rise });
+                }
+            } else if (!A.ground && N.ground) {
+                if (overlap >= 60) {
+                    edges.push({ from: a, to: b, type: "down", cost: 60, overlap: overlap, gap: 0, rise: rise });
+                } else if (b === "GL" && A.left < level.pit.left + 60) {
+                    edges.push({ from: a, to: b, type: "off", cost: 90, overlap: overlap, gap: gap, rise: rise });
+                } else if (b === "GR" && A.right > level.pit.right - 60) {
+                    edges.push({ from: a, to: b, type: "off", cost: 90, overlap: overlap, gap: gap, rise: rise });
+                }
+            } else {
+                const reach = spd * airTime(rise) + 40;
+                if (rise <= maxRise && gap <= reach) {
+                    edges.push({ from: a, to: b, type: "plat", cost: 170 + gap, overlap: overlap, gap: gap, rise: rise });
+                }
+            }
+        });
+    });
+
+    return edges;
+}
+
+function botDijkstra(edges, from) {
+    const dist = {}, prev = {}, done = {};
+    dist[from] = 0;
+    for (;;) {
+        let u = null;
+        Object.keys(dist).forEach(function(k) {
+            if (!done[k] && (u === null || dist[k] < dist[u])) u = k;
+        });
+        if (u === null) break;
+        done[u] = true;
+        edges.forEach(function(e) {
+            if (e.from !== u) return;
+            const nd = dist[u] + e.cost;
+            if (dist[e.to] === undefined || nd < dist[e.to]) {
+                dist[e.to] = nd;
+                prev[e.to] = e;
+            }
+        });
+    }
+    return { dist: dist, prev: prev };
+}
+
+function botFirstEdge(sp, from, to) {
+    if (from === to || sp.dist[to] === undefined) return null;
+    let e = sp.prev[to];
+    let guard = 0;
+    while (e.from !== from && guard++ < 10) e = sp.prev[e.from];
+    return e;
+}
+
+// Ein Navigationsschritt Richtung Zielflaeche
+function botNav(ctx, goalSurf, goalX) {
+    const me = ctx.me, B = ctx.B, now = ctx.now;
+    const out = { dir: 0, jump: false, drop: false, arrived: false, unreachable: false };
+
+    if (ctx.mySurf === goalSurf) {
+        out.arrived = true;
+        return out;
+    }
+
+    const e = botFirstEdge(ctx.spMe, ctx.mySurf, goalSurf);
+
+    if (!e) {
+        out.unreachable = true;
+        out.dir = Math.sign(goalX - me.x);
+        return out;
+    }
+
+    const F = ctx.nodes[e.from], N = ctx.nodes[e.to];
+    const tCenter = (N.left + N.right) / 2;
+    const fCenter = (F.left + F.right) / 2;
+
+    if (e.type === "off") {
+        out.dir = e.to === "GL" ? -1 : 1;
+        return out;
+    }
+
+    if (e.type === "down" || (e.type === "plat" && e.overlap >= 60 && e.rise <= 0)) {
+        out.dir = 0;
+        if (me.platform && me.onGround && now >= B.nextDropAt) {
+            out.drop = true;
+            B.nextDropAt = now + 450;
+        }
+        return out;
+    }
+
+    if (e.type === "up" || (e.type === "plat" && e.overlap >= 60)) {
+        const lo = Math.max(N.left, F.left) + 55;
+        const hi = Math.min(N.right, F.right) - 55;
+        const a = lo <= hi ? Math.max(lo, Math.min(hi, me.x)) : (lo + hi) / 2;
+        const off = a - me.x;
+
+        if (Math.abs(off) > 16) {
+            out.dir = Math.sign(off);
+        } else if (me.onGround && now >= B.nextJumpAt) {
+            out.jump = true;
+            B.hop = { to: e.to, dir: Math.sign(tCenter - me.x) || 1, start: now };
+        }
+        return out;
+    }
+
+    // seitlicher Sprung (Plattform -> Plattform, Grube)
+    const dT = Math.sign(tCenter - fCenter) || 1;
+    let anchor;
+    let tol = 12;
+    if (e.type === "pit") {
+        // so nah wie moeglich an die Kante, aber ein Schritt darf nicht ueber den Rand hinaus
+        const a = Math.max(18, 42 - ctx.spd);
+        anchor = dT > 0 ? level.pit.left + a : level.pit.right - a;
+        tol = 1;
+    } else {
+        anchor = dT > 0 ? F.right + 22 : F.left - 22;
+    }
+
+    const rel = dT * (me.x - anchor);
+
+    out.dir = dT;
+    if (rel >= -tol && me.onGround && now >= B.nextJumpAt) {
+        out.jump = true;
+        B.hop = { to: e.to, dir: dT, start: now };
+    }
+    return out;
+}
+
+// ---------- Items ----------
+
+function botPickItem(ctx) {
+    const me = ctx.me, foe = ctx.foe, data = ctx.data, cfg = ctx.cfg, now = ctx.now;
+    if (!items.length || cfg.items <= 0) return null;
+
+    let best = null, bestScore = 0;
+
+    items.forEach(function(it) {
+        const surf = botItemSurface(it);
+        if (!surf) return;
+
+        const mc = ctx.spMe.dist[surf];
+        if (mc === undefined) return;
+
+        const myCost = mc + Math.abs(me.x - it.x);
+        const fc = ctx.spFoe.dist[surf];
+        const foeCost = (fc === undefined ? 9999 : fc) + Math.abs(foe.x - it.x);
+
+        const id = it.type.id;
+        let w = 0.7;
+        if (id === "heal") w = me.hp < me.maxHp * 0.55 ? 1.8 : (me.hp < me.maxHp - 20 ? 0.9 : 0.2);
+        else if (id === "charge") w = (!me.specialReady && data.special) ? 1.3 : 0.1;
+        else if (id === "golden") w = 2.6;
+        else if (id === "shield") w = 1.0;
+        else if (id === "bomb" || id === "trap") w = 0.55;
+        else if (id === "poison" || id === "reverse") w = 0.9;
+
+        const left = ITEM_LIFETIME - (now - it.spawnedAt);
+        if (left < (myCost / (ctx.spd * 60)) * 1000 + 300) return;
+
+        let score = w * 650 - myCost;
+        if (foeCost < myCost * 0.55) score -= 350;
+        if (ctx.absDx < 300 && myCost > 220) score -= 500;
+        if (score <= 0) return;
+
+        score *= cfg.items;
+        if (score > bestScore) {
+            bestScore = score;
+            best = { item: it, surf: surf };
+        }
+    });
+
+    return best;
+}
+
+// ---------- Gefahren: Bomben, Projektile ----------
+
+function botBombEscape(ctx) {
+    const me = ctx.me, now = ctx.now;
+    let res = null, nearest = Infinity;
+
+    hazards.forEach(function(h) {
+        if (h.kind !== "bomb") return;
+        const left = BOMB_FUSE - (now - h.born);
+        if (left <= 0) return;
+
+        const d = Math.hypot(me.x - h.x, me.y - h.y);
+        if (d > BOMB_RADIUS + 45 || d >= nearest) return;
+
+        let away = Math.sign(me.x - h.x) || (me.x < level.width / 2 ? -1 : 1);
+        if (!botCanWalk(me, away, 40, now, true)) away = -away;
+        if (!botCanWalk(me, away, 40, now, true)) return;
+
+        nearest = d;
+        res = away;
+    });
+
+    return res;
+}
+
+function botProjectilePath(pr, frames) {
+    const path = [];
+    let x = pr.x, y = pr.y, vy = pr.vy;
+    for (let t = 1; t <= frames; t++) {
+        vy += pr.gravity;
+        x += pr.vx;
+        y += vy;
+        path.push({ x: x, y: y });
+        if (pr.gravity > 0 && y > level.groundTop && overGround(x)) break;
+        if (x < -150 || x > level.width + 150 || y > level.groundTop + GROUND_H + 150) break;
+    }
+    return path;
+}
+
+// Simuliert meine Bewegung bei einem Ausweichplan
+function botEvalPlan(ctx, paths, plan, floorY) {
+    const me = ctx.me;
+    let x = me.x, y = me.y, vy = me.vy;
+    let air = !me.onGround;
+    let unsafe = false;
+
+    if (plan.jump) {
+        vy = me.onGround ? JUMP_SPEED : JUMP_SPEED * 0.9;
+        air = true;
+    }
+
+    const minX = SIDE_MARGIN, maxX = Math.max(minX, level.width - SIDE_MARGIN);
+    const pos = [];
+
+    for (let t = 0; t < 75; t++) {
+        x = Math.max(minX, Math.min(maxX, x + plan.dir * ctx.spd));
+        if (air) {
+            vy = Math.min(vy + GRAVITY, MAX_FALL);
+            y += vy;
+            if (y >= floorY && vy >= 0) {
+                y = floorY;
+                vy = 0;
+                air = false;
+            }
+        }
+        if (!air && !me.platform && !overGround(x)) unsafe = true;
+        pos.push({ x: x, y: y });
+    }
+
+    let hits = 0;
+    paths.forEach(function(path) {
+        for (let t = 0; t < path.length && t < pos.length; t++) {
+            if (Math.hypot(path[t].x - pos[t].x, path[t].y - (pos[t].y - PLAYER_H / 2)) <= PROJECTILE_RADIUS + 4) {
+                hits++;
+                break;
+            }
+        }
+    });
+
+    return hits + (unsafe ? 10 : 0);
+}
+
+function botThreatLayer(ctx) {
+    const me = ctx.me, cfg = ctx.cfg, now = ctx.now, B = ctx.B;
+    const res = { dir: null, jump: false, dash: false, block: false };
+
+    const threats = [];
+    projectiles.forEach(function(pr) {
+        if (pr.owner === 2) return;
+        const path = botProjectilePath(pr, 80);
+        for (let t = 0; t < path.length; t++) {
+            if (Math.hypot(path[t].x - me.x, path[t].y - (me.y - PLAYER_H / 2)) <= PROJECTILE_RADIUS) {
+                threats.push({ pr: pr, path: path, eta: t + 1 });
+                break;
+            }
+        }
+    });
+
+    B.plans.forEach(function(v, pr) {
+        if (projectiles.indexOf(pr) < 0) B.plans.delete(pr);
+    });
+
+    if (!threats.length) return res;
+
+    threats.sort(function(a, b) { return a.eta - b.eta; });
+    const first = threats[0];
+
+    let plan = B.plans.get(first.pr);
+    if (!plan) {
+        plan = { since: now, kind: null };
+        B.plans.set(first.pr, plan);
+    }
+
+    if (now - plan.since < cfg.react) return res;
+
+    if (!plan.kind) {
+        if (Math.random() > cfg.dodge) plan.kind = "ignore";
+        else if (threats.length === 1 && now >= me.blockReadyAt && Math.random() < cfg.parry) plan.kind = "parry";
+        else plan.kind = "dodge";
+    }
+
+    if (plan.kind === "ignore") return res;
+
+    const blockReady = now >= me.blockReadyAt;
+    const dashReady = now - me.lastDash >= DASH_COOLDOWN;
+
+    if (plan.kind === "parry") {
+        if (first.eta <= 8 && blockReady) res.block = true;
+        return res;
+    }
+
+    // Ausweichen
+    const land = me.onGround ? null : botLanding(me, 0, 140, now);
+    const floorY = me.onGround ? me.y : (land && land.y !== undefined ? land.y : level.groundTop);
+    const paths = threats.map(function(t) { return t.path; });
+    const pref = ctx.toward;
+    const canJump = me.onGround || me.airJumps > 0;
+
+    const plans = [
+        { dir: 0, jump: false },
+        { dir: -pref, jump: false },
+        { dir: pref, jump: false },
+        { dir: 0, jump: true },
+        { dir: -pref, jump: true },
+        { dir: pref, jump: true }
+    ];
+
+    plans.forEach(function(p) {
+        p.hits = (p.jump && !canJump) ? 99 : botEvalPlan(ctx, paths, p, floorY);
+    });
+
+    const stay = plans[0];
+    if (stay.hits === 0) return res;
+
+    let best = stay;
+    plans.forEach(function(p) { if (p.hits < best.hits) best = p; });
+
+    if (best.hits === 0) {
+        res.dir = best.dir;
+        res.jump = best.jump;
+        return res;
+    }
+
+    // kein sicherer Plan: Notfallaktionen
+    if (dashReady && first.eta >= 1 && first.eta <= 11) res.dash = true;
+    else if (blockReady && first.eta <= 10) res.block = true;
+    else if (best.hits < stay.hits) {
+        res.dir = best.dir;
+        res.jump = best.jump;
+    }
+
+    return res;
+}
+
+// ---------- Luftsteuerung / Absturzschutz ----------
+
+function botAirControl(ctx) {
+    const me = ctx.me, B = ctx.B, now = ctx.now, spd = ctx.spd;
+    const hopDir = (B.hop && now < B.hop.start + 2500) ? B.hop.dir : 0;
+    const want = hopDir || B.dir || 0;
+
+    let best = null;
+    [want, 0, 1, -1].forEach(function(d, idx) {
+        if (idx > 0 && d === want) return;
+        const l = botLanding(me, d * spd, 140, now);
+        let score;
+        if (!l) score = 0;
+        else if (l.fall) score = -1000 + l.t;
+        else {
+            score = 20;
+            if (B.hop && l.surf === B.hop.to) score += 80;
+            else if (l.surf === B.goalSurf) score += 50;
+            else if (l.surf === ctx.foeSurf) score += 40;
+        }
+        score -= idx * 0.5;
+        if (!best || score > best.score) best = { dir: d, score: score, land: l };
+    });
+
+    if (best.land && best.land.fall) {
+        // naechste sichere Flaeche suchen
+        let tx = null, td = Infinity;
+        const consider = function(lo, hi) {
+            if (hi < lo) return;
+            const x = Math.max(lo, Math.min(hi, me.x));
+            const d = Math.abs(x - me.x);
+            if (d < td) { td = d; tx = x; }
+        };
+        level.groundSegs.forEach(function(seg) { consider(seg.left + 60, seg.right - 60); });
+        level.platforms.forEach(function(pl) { if (pl.top >= me.y - 5) consider(pl.left + 10, pl.right - 10); });
+
+        const rd = tx === null ? (best.dir || 1) : (Math.sign(tx - me.x) || 1);
+        best.dir = rd;
+
+        if (me.airJumps > 0 && !isLocked(me)) {
+            jump(2);
+        } else if (now - me.lastDash >= DASH_COOLDOWN && !isLocked(me)) {
+            botDirKeys(me, rd, now);
+            dash(2);
+        }
+    }
+
+    return best.dir;
+}
+
+function botDirKeys(me, d, now) {
+    if (now < me.reverseUntil) d = -d;
+    keys["j"] = d < 0;
+    keys["l"] = d > 0;
+}
+
+// ---------- Positionierung im Kampf ----------
+
+function botPredictShot(me, foe, data, foeVx) {
+    const dir = me.facing;
+    let x = me.x + dir * ATTACK_OFFSET;
+    let y = me.y - PLAYER_H / 2;
+    let vx, vy, g;
+
+    if (data.arc) {
+        const flight = 2 * Math.abs(ARC_THROW_VY) / ARC_GRAVITY;
+        const ahead = (foe.x - me.x) * dir;
+        vx = dir * (ahead > 60
+            ? Math.max(ARC_MIN_VX, Math.min(ARC_MAX_VX, (ahead - ATTACK_OFFSET) / flight))
+            : ARC_DEFAULT_VX);
+        vy = ARC_THROW_VY;
+        g = ARC_GRAVITY;
+    } else {
+        vx = dir * (data.projectileSpeed || 12);
+        vy = 0;
+        g = 0;
+    }
+
+    let fx = foe.x;
+    const fy = foe.y - PLAYER_H / 2;
+    const fvx = Math.max(-6, Math.min(6, foeVx * 0.7));
+
+    for (let t = 1; t <= 75; t++) {
+        vy += g;
+        x += vx;
+        y += vy;
+        fx = Math.max(SIDE_MARGIN, Math.min(level.width - SIDE_MARGIN, fx + fvx));
+        if (Math.hypot(x - fx, y - fy) <= PROJECTILE_RADIUS - 8) return true;
+        if (g > 0 && y > level.groundTop && overGround(x)) return false;
+        if (x < -150 || x > level.width + 150) return false;
+    }
+    return false;
+}
+
+function botRingOut(me, foe, kb, lift, now) {
+    const dir = Math.sign(foe.x - me.x) || me.facing;
+    const missing = 1 - foe.hp / foe.maxHp;
+    const fake = {
+        x: foe.x, y: foe.y, vy: -lift,
+        kx: dir * kb * (1 + missing * KNOCKBACK_PER_MISSING_HP),
+        dropUntil: 0
+    };
+    const l = botLanding(fake, 0, 120, now);
+    return !!(l && l.fall);
+}
+
+function botSpacing(ctx) {
+    const me = ctx.me, foe = ctx.foe, data = ctx.data, foeData = ctx.foeData;
+    const cfg = ctx.cfg, now = ctx.now, B = ctx.B;
+    const out = { dir: 0, jump: false, drop: false, dash: false, cornered: false };
+
+    const absDx = ctx.absDx, toward = ctx.toward, away = -toward;
+    const dy = Math.abs(foe.y - me.y);
+    const myReady = now - me.lastAttack >= data.cooldown;
+    const foeReady = now - foe.lastAttack >= foeData.cooldown - 120;
+    const stall = suddenDeath && me.hp > foe.hp + 4;
+
+    // Gefahr: Grube direkt hinter mir, Gegner nah davor
+    let pitBehind = Infinity;
+    if (!me.platform && me.onGround) {
+        if (ctx.mySurf === "GL" && away > 0) pitBehind = level.pit.left - me.x;
+        if (ctx.mySurf === "GR" && away < 0) pitBehind = me.x - level.pit.right;
+    }
+
+    let want;
+    if (data.ranged) {
+        if (foeData.ranged) want = data.arc ? [360, 640] : [420, 700];
+        else want = data.arc ? [380, 620] : [340, 600];
+    } else {
+        want = null;
+    }
+
+    if (want) {
+        if (absDx < want[0]) {
+            if (botCanWalk(me, away, 36, now, false, 200)) out.dir = away;
+            else out.cornered = true;
+        } else if (absDx > want[1]) {
+            if (botCanWalk(me, toward, 36, now)) out.dir = toward;
+        }
+    } else {
+        const inR = inReach(me, foe, REACH_ATTACK - 12);
+
+        let kite = false;
+        if (!foeData.ranged && !myReady && foeReady && cfg.kite > 0) {
+            if (B.kiteKey !== foe.lastAttack) {
+                B.kiteKey = foe.lastAttack;
+                B.kiteOn = Math.random() < cfg.kite;
+            }
+            kite = B.kiteOn;
+        }
+        if (stall) kite = true;
+
+        if (kite && absDx < REACH_ATTACK + 90 && dy < 160) {
+            if (botCanWalk(me, away, 36, now, false, 200)) out.dir = away;
+            else out.cornered = true;
+        } else if (!inR) {
+            if (botCanWalk(me, toward, 36, now)) out.dir = toward;
+        }
+    }
+
+    // eingekesselt oder Grube im Ruecken -> an Gegner vorbei
+    const closeEnough = absDx < REACH_ATTACK + 70;
+    const pitDanger = pitBehind < 220 && absDx < 330;
+    if ((out.cornered && closeEnough) || pitDanger) {
+        if (now - me.lastDash >= DASH_COOLDOWN && cfg.dash > 0 && Math.random() < 0.5 + 0.5 * cfg.dash) {
+            out.dash = true;
+            out.dir = toward;
+        } else if (me.onGround && now >= B.nextJumpAt && cfg.dash > 0.2) {
+            out.jump = true;
+            out.dir = toward;
+        }
+    }
+
+    // Gegner weit weg: gelegentlich per Dash naeher
+    if (!out.dash && absDx > 380 && now - me.lastDash >= DASH_COOLDOWN && cfg.dash > 0 &&
+        Math.random() < 0.02 * cfg.dash && botCanWalk(me, toward, 330, now)) {
+        out.dash = true;
+        out.dir = toward;
+    }
+
+    return out;
+}
+
+function botStrategy(ctx) {
+    const me = ctx.me, foe = ctx.foe, data = ctx.data, B = ctx.B;
+
+    const pick = botPickItem(ctx);
+    if (pick) {
+        B.goalSurf = pick.surf;
+        const nav = botNav(ctx, pick.surf, pick.item.x);
+        if (!nav.unreachable) {
+            if (nav.arrived) {
+                const off = pick.item.x - me.x;
+                nav.dir = Math.abs(off) > 14 ? Math.sign(off) : 0;
+                if (nav.dir !== 0 && !botCanWalk(me, nav.dir, 20, ctx.now, true)) nav.dir = 0;
+            }
+            return nav;
+        }
+    }
+
+    B.goalSurf = ctx.foeSurf;
+    const nav = botNav(ctx, ctx.foeSurf, foe.x);
+
+    if (!nav.arrived && !nav.unreachable) {
+        const holdAndShoot = data.ranged && ctx.shotHits;
+        if (!holdAndShoot) return nav;
+    }
+
+    return botSpacing(ctx);
+}
+
+// ---------- Verteidigung gegen Nahkampf ----------
+
+function botDefend(ctx) {
+    const me = ctx.me, foe = ctx.foe, data = ctx.data, foeData = ctx.foeData;
+    const cfg = ctx.cfg, now = ctx.now, B = ctx.B;
+    const res = { block: false, dash: false, dir: 0 };
+
+    if (foeData.ranged && ["precision", "kick", "push"].indexOf(foeData.special) < 0) return res;
+    if (now < foe.disabledUntil || now < foe.dashUntil) return res;
+
+    const near = Math.hypot(foe.x - me.x, foe.y - me.y) <= REACH_ATTACK + 14;
+    if (!near) return res;
+
+    const attackReady = !foeData.ranged && now >= foe.lastAttack + foeData.cooldown - 40;
+    const specialThreat = foe.specialReady && ["precision", "kick", "push"].indexOf(foeData.special) >= 0;
+    if (!attackReady && !specialThreat) return res;
+
+    if (B.defKey !== foe.lastAttack) {
+        B.defKey = foe.lastAttack;
+        B.defSince = now;
+        B.defBlock = Math.random() < cfg.block;
+        B.defDash = Math.random() < cfg.dash * 0.35;
+    }
+    if (now - B.defSince < cfg.react) return res;
+
+    // wenn ich zuerst zuschlagen kann, lieber angreifen
+    if (now - me.lastAttack >= data.cooldown && inReach(me, foe, REACH_ATTACK - 12)) return res;
+
+    if (B.defBlock && now >= me.blockReadyAt) {
+        res.block = true;
+    } else if (B.defDash && now - me.lastDash >= DASH_COOLDOWN) {
+        res.dash = true;
+        res.dir = ctx.toward;
+    }
+    return res;
+}
+
+// ---------- Spezialfaehigkeiten ----------
+
+function botSpecial(ctx) {
+    const me = ctx.me, foe = ctx.foe, data = ctx.data, foeData = ctx.foeData;
+    const cfg = ctx.cfg, now = ctx.now, B = ctx.B;
+
+    if (!me.specialReady || !data.special) return;
+    if (now < B.nextSpecialAt) return;
+
+    const absDx = ctx.absDx;
+    const foeUntouchable = now < foe.dashUntil || now < foe.blockUntil;
+    const helplessMs = Math.max(foe.disabledUntil, foe.rootedUntil, foe.fleeUntil) - now;
+    const reachOK = inReach(me, foe, REACH_SPECIAL - 10) && !foeUntouchable;
+    let use = false;
+
+    switch (data.special) {
+
+        case "precision": {
+            const mult = (now < me.damageUntil ? DAMAGE_BOOST : 1) *
+                (me.hp <= me.maxHp * RAGE_THRESHOLD ? RAGE_DAMAGE : 1);
+            const kill = foe.hp <= 20 * mult;
+            use = reachOK && (kill || helplessMs > 1500 || (me.hp - foe.hp >= 35 && Math.random() < 0.3));
+            break;
+        }
+
+        case "kick":
+            use = reachOK;
+            break;
+
+        case "push": {
+            const pushOK = inReach(me, foe, REACH_PUSH - 10) && !foeUntouchable;
+            use = pushOK && (botRingOut(me, foe, 20, 9, now) || foe.hp <= 8 || ctx.cornered || Math.random() < 0.35);
+            break;
+        }
+
+        case "complain":
+            use = absDx < 520 || ctx.cornered;
+            break;
+
+        case "slippery": {
+            const nearPit = Math.abs(foe.x - (level.pit.left + level.pit.right) / 2) < 480;
+            use = (nearPit && absDx < 900) || absDx < 600;
+            break;
+        }
+
+        case "paintstorm":
+            use = now >= foe.dashUntil && absDx < 1100;
+            break;
+
+        case "teleport": {
+            const pressed = absDx < 420 && (me.hp <= me.maxHp * 0.45 || ctx.cornered);
+            use = pressed || (absDx < 250 && foe.hp - me.hp > 35);
+            break;
+        }
+
+        case "transform":
+            use = absDx < 380;
+            break;
+
+        case "collinSpeed":
+            use = now >= me.collinUltUntil && absDx < 900;
+            break;
+    }
+
+    if (use && Math.random() < cfg.special) {
+        special(2);
+        B.nextSpecialAt = now + cfg.specialDelay;
+    } else {
+        B.nextSpecialAt = now + 100;
+    }
+}
+
+// ---------- Angriff ----------
+
+function botOffense(ctx) {
+    const me = ctx.me, foe = ctx.foe, data = ctx.data, cfg = ctx.cfg, now = ctx.now, B = ctx.B;
+
+    // Blickrichtung zum Gegner
+    me.facing = ctx.toward;
+
+    const inR = inReach(me, foe, REACH_ATTACK - 8);
+    if (inR) { if (!B.inReachSince) B.inReachSince = now; }
+    else B.inReachSince = 0;
+
+    botSpecial(ctx);
+
+    if (now - me.lastAttack < data.cooldown) return;
+    if (now < foe.dashUntil || now < foe.blockUntil) return;
+
+    if (data.ranged) {
+        const hit = botPredictShot(me, foe, data, B.foeVx);
+        if (hit ? Math.random() < Math.min(1, cfg.aim + 0.3) : Math.random() < (1 - cfg.aim) * 0.15) {
+            attack(2);
+        }
+        return;
+    }
+
+    if (inR && now - B.inReachSince >= cfg.react * 0.4) {
+        if (Math.random() >= cfg.miss) attack(2);
+    }
+}
+
+// ---------- Hauptschleife der KI (jeden Frame) ----------
+
 function botThink(now) {
     if (gameMode !== "bot" || !fighting) return;
 
-    const bot = players[2];
-    const enemy = players[1];
-    if (!bot || !enemy || bot.hp <= 0) return;
+    const me = players[2];
+    const foe = players[1];
 
-    // The bot does not use the human keyboard. It gets a lightweight decision loop.
-    if (now < botNextThink) return;
+    if (!me || !foe || me.hp <= 0 || foe.hp <= 0 || !me.character || !foe.character) return;
+
+    if (!botMem) botResetMemory(now);
+
+    const B = botMem;
     const cfg = BOT_LEVELS[botDifficulty] || BOT_LEVELS.hard;
-    botNextThink = now + cfg.think;
+    const data = characters[me.character];
+    const foeData = characters[foe.character];
 
-    const dx = enemy.x - bot.x;
-    const absDx = Math.abs(dx);
-    const dir = Math.sign(dx) || bot.facing || -1;
-    bot.facing = dir;
+    // Gegnergeschwindigkeit schaetzen
+    const frames = Math.max(0.5, Math.min(3, (now - B.lastNow) / (1000 / 60)));
+    if (B.foeX !== null && now - B.lastNow < 100) {
+        B.foeVx = B.foeVx * 0.6 + ((foe.x - B.foeX) / frames) * 0.4;
+    } else {
+        B.foeVx = 0;
+    }
+    B.foeX = foe.x;
+    B.lastNow = now;
 
-    // Clear bot movement keys and decide a new direction.
     keys["j"] = false;
     keys["l"] = false;
 
-    if (now < bot.disabledUntil || now < bot.blockUntil || now < bot.rootedUntil) return;
+    const canAct = now >= me.disabledUntil && now >= me.blockUntil;
+    if (!canAct) { B.dir = 0; return; }
 
-    // Keep some distance for ranged characters, otherwise approach.
-    const data = characters[bot.character];
-    let desired = data.ranged ? 430 : 145;
+    const canMove = now >= me.rootedUntil && now >= me.fleeUntil && now >= me.dashUntil;
 
-    if (absDx > desired + 55) {
-        if (dir < 0) keys["j"] = true;
-        else keys["l"] = true;
-    } else if (absDx < desired - 65) {
-        if (dir < 0) keys["l"] = true;
-        else keys["j"] = true;
+    let spd = data.speed * SPEED_SCALE;
+    if (now < me.speedUntil) spd *= SPEED_BOOST;
+    if (me.character === "Collin" && now < me.collinUltUntil) spd *= COLLIN_ULT_SPEED;
+
+    const dx = foe.x - me.x;
+    const toward = Math.sign(dx) || me.facing || -1;
+
+    // Flaechen & Wegfindung
+    const nodes = botNodes();
+    const edges = botBuildGraph(me, data, spd, nodes, now);
+    const mySurf = me.onGround ? botStanding(me) : B.mySurf;
+    B.mySurf = mySurf;
+
+    let foeSurf;
+    if (foe.onGround) {
+        foeSurf = botStanding(foe);
+    } else {
+        const l = botLanding(foe, B.foeVx * 0.5, 100, now);
+        foeSurf = (l && l.surf) || B.foeSurf;
+    }
+    B.foeSurf = foeSurf;
+
+    if (B.hop && me.onGround && now > B.hop.start + 250) B.hop = null;
+
+    const ctx = {
+        me: me, foe: foe, data: data, foeData: foeData, cfg: cfg, now: now, B: B,
+        spd: spd, dx: dx, absDx: Math.abs(dx), toward: toward,
+        nodes: nodes, mySurf: mySurf, foeSurf: foeSurf,
+        spMe: botDijkstra(edges, mySurf), spFoe: botDijkstra(edges, foeSurf),
+        shotHits: false, cornered: false
+    };
+
+    if (data.ranged) {
+        const savedFacing = me.facing;
+        me.facing = toward;
+        ctx.shotHits = botPredictShot(me, foe, data, B.foeVx);
+        me.facing = savedFacing;
     }
 
-    // Avoid walking straight into the center pit.
-    const nearPit = Math.abs(bot.x - (level.pit.left + level.pit.right) / 2) <
-        (level.pit.right - level.pit.left) / 2 + 45;
-    if (nearPit && bot.onGround) {
-        const escapeDir = bot.x < (level.pit.left + level.pit.right) / 2 ? -1 : 1;
-        keys["j"] = escapeDir < 0;
-        keys["l"] = escapeDir > 0;
+    let dir = null;
+    let wantJump = false, wantDrop = false, wantDash = false, dashDir = 0;
+
+    // 1) Bomben
+    const bombDir = botBombEscape(ctx);
+    if (bombDir !== null) dir = bombDir;
+
+    // 2) Projektile
+    const threat = botThreatLayer(ctx);
+    if (threat.block) {
+        block(2);
+        B.dir = 0;
+        return;
+    }
+    if (threat.dir !== null) dir = threat.dir;
+    if (threat.jump) wantJump = true;
+    if (threat.dash) {
+        wantDash = true;
+        dashDir = (threat.dir !== null && threat.dir !== 0) ? threat.dir : toward;
     }
 
-    // Jump when the enemy is above/below on a platform, or occasionally to vary movement.
-    if (now >= botJumpUntil &&
-        ((enemy.y < bot.y - 80 && Math.random() < cfg.chaseJump) ||
-         (bot.onGround && Math.random() < cfg.randJump))) {
-        jump(2);
-        botJumpUntil = now + 900;
+    // 3) Nahkampf-Verteidigung
+    const def = botDefend(ctx);
+    if (def.block) {
+        block(2);
+        B.dir = 0;
+        return;
+    }
+    if (def.dash && !wantDash) {
+        wantDash = true;
+        dashDir = def.dir || toward;
     }
 
-    // Dash occasionally while closing distance.
-    if (absDx > 260 && Math.random() < cfg.dash) {
+    // 4) Luft: sicher landen
+    if (!me.onGround) {
+        const ad = botAirControl(ctx);
+        if (dir === null) {
+            dir = ad;
+        } else {
+            const l = botLanding(me, dir * spd, 140, now);
+            if (l && l.fall) dir = ad;
+        }
+    }
+
+    // 5) Strategie am Boden
+    if (me.onGround && canMove) {
+        const st = botStrategy(ctx);
+        ctx.cornered = !!st.cornered;
+        if (dir === null) dir = st.dir;
+        if (st.jump) wantJump = true;
+        if (st.drop) wantDrop = true;
+        if (st.dash && !wantDash) { wantDash = true; dashDir = st.dir || toward; }
+    } else if (dir === null) {
+        dir = 0;
+    }
+
+    // 6) Anfaenger-Modus: kurze Aussetzer
+    if (cfg.dither > 0) {
+        if (now >= B.nextIdleRoll) {
+            B.nextIdleRoll = now + 700;
+            if (Math.random() < cfg.dither) B.idleUntil = now + 500;
+        }
+        if (now < B.idleUntil && me.onGround && threat.dir === null && bombDir === null) {
+            dir = 0;
+            wantJump = false;
+        }
+    }
+
+    // 7) Fallen des Gegners ueberspringen
+    if (me.onGround && dir && !wantJump && now >= B.nextJumpAt) {
+        hazards.forEach(function(h) {
+            if (h.kind === "trap" && h.owner !== 2 && Math.abs(h.y - me.y) < 40) {
+                const ahead = (h.x - me.x) * dir;
+                if (ahead > 20 && ahead < 150) wantJump = true;
+            }
+        });
+    }
+
+    if (!canMove) dir = 0;
+    B.dir = dir || 0;
+
+    // Aktionen ausfuehren
+    if (wantDash && canMove) {
+        botDirKeys(me, dashDir, now);
         dash(2);
     }
 
-    // Attack when in range, or shoot when the character is ranged.
-    if (now >= botNextAttack) {
-        const attackRange = data.ranged ? 520 : REACH_ATTACK + cfg.rangeBonus;
-        if (absDx <= attackRange) {
-            if (Math.random() >= cfg.miss) attack(2);
-            botNextAttack = now + Math.max(cfg.attackMin, data.cooldown * cfg.attackMul);
-        }
+    botDirKeys(me, B.dir, now);
+
+    if (wantJump && now >= B.nextJumpAt) {
+        const was = me.vy;
+        jump(2);
+        B.nextJumpAt = now + 350;
+        if (me.vy === was && !me.onGround) B.nextJumpAt = now + 120;
     }
 
-    // Use special as soon as it is useful.
-    if (bot.specialReady && now >= botNextAction) {
-        if (absDx < 650 || data.special === "collinSpeed") {
-            if (Math.random() < cfg.specialChance) special(2);
-            botNextAction = now + cfg.specialDelay;
-        }
-    }
+    if (wantDrop) dropDown(2);
 
-    // Occasionally block when close to the enemy.
-    if (absDx < 300 && Math.random() < cfg.block) {
-        block(2);
-    }
+    // 8) Angriff / Spezial
+    botOffense(ctx);
 }
+
 
 function applyPhysics(p, dt) {
 
