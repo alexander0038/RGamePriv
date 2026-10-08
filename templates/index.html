@@ -582,41 +582,41 @@ const IMG_BG = "{{ url_for('static', filename='Hintergrund/hintergrund.png') }}"
 const characters = {
 
     Elia: {
-        hp: 100, speed: 3.2, damage: 15, cooldown: 1750,
+        hp: 105, speed: 3.2, damage: 15, cooldown: 1450,
         attack: "EliaSchlag", special: "precision",
-        critChance: 0.05
+        critChance: 0.075
     },
 
     Toni: {
-        hp: 90, speed: 3.8, damage: 8, cooldown: 800,
+        hp: 90, speed: 3.8, damage: 11, cooldown: 900,
         attack: "ToniKlatsche", special: "complain",
-        doubleJump: true, ranged: true, projectileSpeed: 11
+        doubleJump: true, ranged: true, projectileSpeed: 15
     },
 
     Alex: {
-        hp: 100, speed: 3.2, damage: 10.5, cooldown: 1000,
+        hp: 100, speed: 3.2, damage: 12.5, cooldown: 1000,
         attack: "AlexTritt", special: "kick", critChance: 0.1
     },
 
     HenningPrime: {
-        hp: 85, speed: 3.8, damage: 10, cooldown: 650,
+        hp: 85, speed: 3.8, damage: 10, cooldown: 550,
         attack: "HenningKratzer", special: "teleport"
     },
 
     MaxH: {
-        hp: 120, speed: 2.5, damage: 14, cooldown: 1500,
+        hp: 115, speed: 2.5, damage: 14, cooldown: 1500,
         attack: "MaxBauchStoss", special: "push",
         superarmor: true
     },
 
     Fabian: {
-        hp: 90, speed: 3.2, damage: 10, cooldown: 1000,
+        hp: 90, speed: 3.2, damage: 10.5, cooldown: 1000,
         attack: "FabianButter", special: "slippery",
-        ranged: true, projectileSpeed: 13
+        ranged: true, projectileSpeed: 20
     },
 
     Isabella: {
-        hp: 90, speed: 3.4, damage: 10, cooldown: 1300,
+        hp: 90, speed: 3.4, damage: 12.5, cooldown: 1300,
         attack: "IsabellaPinsel", special: "paintstorm",
         ranged: true, arc: true
     },
@@ -624,12 +624,12 @@ const characters = {
     Collin: {
         hp: 100, speed: 3.3, damage: 12, cooldown: 950,
         attack: "CollinAngriff", special: "collinSpeed",
-        range: true, projectileSpeed: 12
+        ranged: true, projectileSpeed: 12
     },
 
     // Jannes wirft das Steak im Bogen und verwandelt sich mit seiner Ult in Luis (bis zum Rundenende)
     Jannes: {
-        hp: 100, speed: 3.2, damage: 11, cooldown: 1000,
+        hp: 100, speed: 3.2, damage: 12.5, cooldown: 1000,
         attack: "JannesSteak", special: "transform", transformTo: "Luis",
         ranged: true, arc: true
     },
