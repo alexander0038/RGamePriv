@@ -629,6 +629,7 @@ const PROJECTILE_RADIUS = 85;
 const HIT_KNOCKBACK = 9;
 const KNOCKBACK_PER_MISSING_HP = 1.2;
 const DASH_COOLDOWN = 2000;
+const MELEE_WINDUP = 140;
 const DASH_SPEED = 26;
 const DASH_TIME = 200;
 const SPEED_SCALE = 1.45;
@@ -3369,9 +3370,13 @@ function attack(player) {
     showAttack(player);
     sfx("swing");
 
-    if (inReach(attacker, enemy, REACH_ATTACK)) {
-        damageEnemy(player, data.damage, { canCrit: true });
-    }
+    // Ausholzeit: der Treffer kommt erst nach MELEE_WINDUP ms, Reichweite und Zustand werden dann neu geprueft
+    setTimeout(function() {
+        if (!fighting || Date.now() < attacker.disabledUntil) return;
+        if (inReach(attacker, enemy, REACH_ATTACK)) {
+            damageEnemy(player, data.damage, { canCrit: true });
+        }
+    }, MELEE_WINDUP);
 
 }
 
@@ -5537,6 +5542,64 @@ initNameInputs();
         requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
+})();
+</script>
+<script>
+// Kampf-Erweiterungen: schwerer Angriff (Taste halten), Kombo-Bonus, Rueckstoss, Wand-Aufprall
+(function() {
+    var KEYS = { e: 1, o: 2 }, HOLD = 450, HEAVY_WINDUP = 300, HEAVY_CD = 1600;
+    var downAt = {}, combo = { 1: { n: 0, t: 0 }, 2: { n: 0, t: 0 } }, heavyUntil = { 1: 0, 2: 0 };
+
+    // Kombo: Treffer innerhalb von 1,5 s geben je +8 % Schaden (max +40 %)
+    var _dmg = window.damageEnemy;
+    window.damageEnemy = function(player, damage, opts) {
+        var now = Date.now(), c = combo[player];
+        c.n = now - c.t < 1500 ? Math.min(c.n + 1, 5) : 0;
+        c.t = now;
+        if (c.n > 0) { damage = Math.round(damage * (1 + 0.08 * c.n)); if (c.n >= 2) floatText(players[player].x, players[player].y - PLAYER_H - 24, c.n + 1 + "x KOMBO", "combo"); }
+        return _dmg.call(this, player, damage, opts);
+    };
+
+    function heavy(n) {
+        if (!fighting) return;
+        var a = players[n], e = players[otherPlayer(n)], now = Date.now();
+        if (now < a.disabledUntil || now < a.blockUntil || now < heavyUntil[n]) return;
+        var data = characters[a.character];
+        if (data.ranged) { attack(n); return; }          // Fernkaempfer: normaler Schuss
+        heavyUntil[n] = now + HEAVY_CD; a.lastAttack = now;
+        floatText(a.x, a.y - PLAYER_H, "SCHWER!", "info"); sfx("swing"); showAttack(n);
+        setTimeout(function() {
+            if (!fighting || Date.now() < a.disabledUntil || !inReach(a, e, REACH_ATTACK + 10)) return;
+            if (Date.now() < e.dashUntil) { floatText(e.x, e.y - PLAYER_H, "AUSGEWICHEN!", "info"); return; }
+            var blocking = Date.now() < e.blockUntil;
+            if (blocking) { e.blockUntil = 0; floatText(e.x, e.y - PLAYER_H, "BLOCK GEBROCHEN!", "info"); }
+            if (damageEnemy(n, Math.round(data.damage * 2), { canCrit: true }) === false && !blocking) return;
+            var dir = Math.sign(e.x - a.x) || a.facing;
+            e.x += dir * 70;                               // Rueckstoss
+            e.disabledUntil = Math.max(e.disabledUntil, Date.now() + 450);   // Betaeubung
+            hitstop(140); shake(8, 200);
+            var W = (document.getElementById("arena") || {}).clientWidth || 1200;
+            if (e.x < 40 || e.x > W - 40) {                // Wand-Aufprall
+                applyDamage(otherPlayer(n), 6, n, "dmg"); floatText(e.x, e.y - PLAYER_H - 20, "WAND!", "combo"); shake(10, 220);
+            }
+        }, HEAVY_WINDUP);
+    }
+
+    // Taste kurz = normaler Angriff (beim Loslassen), Taste >= 450 ms halten = schwerer Angriff
+    window.addEventListener("keydown", function(ev) {
+        var n = KEYS[ev.key && ev.key.toLowerCase()];
+        if (!n) return;
+        ev.stopImmediatePropagation();
+        if (ev.repeat || downAt[n]) return;
+        downAt[n] = Date.now();
+        setTimeout(function() { if (downAt[n] && fighting) floatText(players[n].x, players[n].y - PLAYER_H - 10, "LADEN…", "info"); }, HOLD);
+    }, true);
+    window.addEventListener("keyup", function(ev) {
+        var n = KEYS[ev.key && ev.key.toLowerCase()];
+        if (!n || !downAt[n]) return;
+        var held = Date.now() - downAt[n]; downAt[n] = 0;
+        if (held >= HOLD) heavy(n); else attack(n);
+    }, true);
 })();
 </script>
 </body>
