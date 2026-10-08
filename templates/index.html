@@ -256,6 +256,111 @@
         .bg-fx::before, .t-b, .hero, #mode-select, .players, .pv-art img { animation: none; }
     }
 </style>
+<style id="game-style">
+    /* ===== Namensfeld im Menü ===== */
+    .name-field { display: block; margin: 0 0 12px; }
+    .name-field span { display: block; margin-bottom: 4px; font-size: 11px; letter-spacing: 2px; color: #8f9bb5; text-transform: uppercase; }
+    .name-input {
+        width: 100%; padding: 11px 14px; border-radius: 10px; font-size: 18px; font-weight: 700; letter-spacing: 1px;
+        color: #fff; background: rgba(0,0,0,0.35); border: 2px solid color-mix(in srgb, var(--pc) 40%, #2a2f3d);
+        -webkit-user-select: text; user-select: text;
+    }
+    .name-input::placeholder { color: #566079; font-weight: 400; letter-spacing: 0; }
+    .name-input:focus { outline: none; border-color: var(--pc); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pc) 28%, transparent); }
+    .name-input:read-only { opacity: 0.7; }
+    .player-select.bot-mode .name-input { pointer-events: none; }
+    body[data-mode="bot"] .player-select.p2 .name-field { display: none; }
+    @media (max-height: 560px) { .name-field span { display: none; } .name-field { margin-bottom: 6px; } .name-input { padding: 6px 10px; font-size: 15px; } }
+
+    /* ===== HUD im Kampfspiel-Stil ===== */
+    #hud { top: 10px; gap: 16px; }
+    .health-container {
+        --pc: #4da3ff; position: relative; width: 38%; min-width: 230px; padding: 8px 14px 9px;
+        border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); border-left: 4px solid var(--pc);
+        background: linear-gradient(180deg, rgba(10,12,20,0.80), rgba(10,12,20,0.45));
+        box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+    }
+    #hud > .health-container:last-child {
+        --pc: #ff5d5d; text-align: right; border-left: 1px solid rgba(255,255,255,0.10); border-right: 4px solid var(--pc);
+    }
+    .name {
+        margin-bottom: 6px; font-family: Impact, Haettenschweiler, "Arial Black", sans-serif; font-style: italic;
+        font-size: 22px; font-weight: normal; letter-spacing: 1.5px; text-transform: uppercase; text-shadow: 2px 2px 0 rgba(0,0,0,0.6);
+    }
+    .wins { color: #ffd34d; font-size: 15px; letter-spacing: 2px; text-shadow: none; }
+    .health-bar {
+        height: 22px; border: 2px solid rgba(255,255,255,0.85); border-radius: 4px; transform: skewX(-14deg);
+        background: #0d0f16; box-shadow: 0 3px 10px rgba(0,0,0,0.5), inset 0 0 8px rgba(0,0,0,0.8);
+    }
+    #hud > .health-container:last-child .health-bar { transform: scaleX(-1) skewX(-14deg); }
+    .health-bar::after {
+        content: ""; position: absolute; left: 0; right: 0; top: 0; height: 45%; pointer-events: none;
+        background: linear-gradient(180deg, rgba(255,255,255,0.28), transparent);
+    }
+    .special { font-size: 13px; letter-spacing: 1px; color: #ffe9a8; }
+    #timer {
+        flex: 0 0 auto; width: 76px; min-width: 0; height: 76px; padding: 0; display: flex; align-items: center; justify-content: center;
+        border-radius: 50%; border: 3px solid #ffd34d; font-family: Impact, "Arial Black", sans-serif; font-size: 25px; font-weight: normal; letter-spacing: 1px;
+        background: radial-gradient(circle, #252d44, #0b0d12); box-shadow: 0 0 18px rgba(255,211,77,0.35), 0 4px 12px rgba(0,0,0,0.5);
+    }
+
+    /* ===== Rundenanzeige ===== */
+    #round-banner {
+        inset: auto; left: 0; right: 0; top: 50%; transform: translateY(-50%); padding: 22px 0 26px; gap: 6px;
+        background: linear-gradient(90deg, transparent, rgba(5,7,12,0.78) 18%, rgba(5,7,12,0.78) 82%, transparent);
+    }
+    #banner-text {
+        font-family: Impact, Haettenschweiler, "Arial Black", sans-serif; font-style: italic; font-weight: normal;
+        font-size: clamp(46px, 11vw, 118px); line-height: 1; letter-spacing: 4px; text-shadow: none; text-align: center;
+        background: linear-gradient(180deg, #fff6c8, #ffd34d 45%, #ff8a3d); -webkit-background-clip: text; background-clip: text; color: transparent;
+        filter: drop-shadow(4px 4px 0 rgba(110,20,20,0.85)) drop-shadow(0 0 24px rgba(255,150,60,0.45));
+    }
+    #banner-sub { font-size: clamp(16px, 2.6vw, 28px); letter-spacing: 3px; color: #e9eefc; text-shadow: 2px 2px 8px black; text-align: center; }
+
+    /* ===== Siegerbildschirm ===== */
+    #game-over {
+        --pc: #4da3ff; gap: 10px; padding: 20px; overflow-y: auto; text-align: center;
+        background:
+            radial-gradient(60% 50% at 50% 35%, color-mix(in srgb, var(--pc) 30%, transparent), transparent 70%),
+            rgba(6,8,13,0.96);
+    }
+    #game-over[data-winner="2"] { --pc: #ff5d5d; }
+    .go-eyebrow { letter-spacing: 8px; font-size: 13px; color: #ffd34d; }
+    .go-hero { --c: #888; height: min(34vh, 300px); display: flex; align-items: center; justify-content: center; }
+    .go-hero img { height: 100%; object-fit: contain; filter: drop-shadow(0 0 30px color-mix(in srgb, var(--c) 70%, transparent)) drop-shadow(0 12px 10px rgba(0,0,0,0.6)); animation: pvIn 0.5s ease-out; }
+    #game-over h1 {
+        margin: 0; font-family: Impact, Haettenschweiler, "Arial Black", sans-serif; font-style: italic; font-weight: normal;
+        font-size: clamp(34px, 7vw, 72px); letter-spacing: 3px;
+        background: linear-gradient(180deg, #fff6c8, #ffd34d 50%, #ff8a3d); -webkit-background-clip: text; background-clip: text; color: transparent;
+        filter: drop-shadow(3px 3px 0 rgba(110,20,20,0.85));
+    }
+    #final-score { margin: 0; font-size: 20px; letter-spacing: 3px; color: #ffd34d; }
+    #go-cards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; margin: 6px 0 4px; }
+    .go-card {
+        --pc: #4da3ff; min-width: 230px; padding: 12px 16px; text-align: left; border-radius: 14px;
+        border: 2px solid color-mix(in srgb, var(--pc) 45%, #20242f); background: linear-gradient(160deg, color-mix(in srgb, var(--pc) 14%, #171b26), #10131b);
+    }
+    .go-card.p2 { --pc: #ff5d5d; }
+    .go-card.win { box-shadow: 0 0 24px color-mix(in srgb, var(--pc) 40%, transparent); }
+    .go-card h3 { margin: 0 0 2px; font-size: 18px; letter-spacing: 1px; text-transform: uppercase; }
+    .go-card .ch { margin-bottom: 8px; font-size: 12px; color: #8f9bb5; letter-spacing: 1px; text-transform: uppercase; }
+    .go-card .row { display: flex; justify-content: space-between; gap: 18px; font-size: 14px; color: #c9d2e6; padding: 2px 0; }
+    .go-card .row b { color: #fff; }
+    #game-over .buttons { margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+    @media (max-height: 560px) {
+        #hud { top: 4px; }
+        .health-container { padding: 4px 10px 5px; min-width: 190px; }
+        .name { font-size: 15px; margin-bottom: 3px; }
+        .health-bar { height: 15px; }
+        .special { font-size: 11px; margin-top: 3px; }
+        .cooldowns { display: none; }
+        #timer { width: 54px; height: 54px; font-size: 18px; border-width: 2px; }
+        .go-hero { height: 24vh; }
+        .go-card { min-width: 190px; padding: 8px 12px; }
+        #game-over { gap: 4px; padding: 10px; }
+    }
+</style>
+
 
 </head>
 
@@ -308,6 +413,8 @@
                 <div id="ready1" class="ready">NICHT BEREIT</div>
             </div>
 
+            <label class="name-field"><span>Dein Name</span><input id="name-input-1" class="name-input" maxlength="12" placeholder="z. B. Ricardo" autocomplete="off" spellcheck="false"></label>
+
             <div class="keys">
                 <span class="k"><b>A</b><b>D</b><i>Laufen</i></span>
                 <span class="k"><b>W</b><i>Sprung</i></span>
@@ -342,6 +449,8 @@
                 <h2 id="title-p2">SPIELER 2</h2>
                 <div id="ready2" class="ready">NICHT BEREIT</div>
             </div>
+
+            <label class="name-field"><span>Name Spieler 2</span><input id="name-input-2" class="name-input" maxlength="12" placeholder="z. B. Ricardo" autocomplete="off" spellcheck="false"></label>
 
             <div class="keys">
                 <span class="k"><b>J</b><b>L</b><i>Laufen</i></span>
@@ -463,9 +572,15 @@
 
 <div id="game-over" class="hidden">
 
+    <div class="go-eyebrow">SIEGER</div>
+
+    <div id="go-hero" class="go-hero"><img id="go-portrait" alt=""></div>
+
     <h1 id="winner">SPIELER 1 GEWINNT!</h1>
 
     <div id="final-score"></div>
+
+    <div id="go-cards"></div>
 
     <div class="buttons">
         <button onclick="rematch()">REVANCHE</button>
@@ -582,41 +697,41 @@ const IMG_BG = "{{ url_for('static', filename='Hintergrund/hintergrund.png') }}"
 const characters = {
 
     Elia: {
-        hp: 10, speed: 3.2, damage: 15, cooldown: 1450,
+        hp: 100, speed: 3.2, damage: 15, cooldown: 1750,
         attack: "EliaSchlag", special: "precision",
-        critChance: 0.075
+        critChance: 0.05
     },
 
     Toni: {
-        hp: 90, speed: 3.8, damage: 11, cooldown: 900,
+        hp: 90, speed: 3.8, damage: 8, cooldown: 800,
         attack: "ToniKlatsche", special: "complain",
-        doubleJump: true, ranged: true, projectileSpeed: 15
+        doubleJump: true, ranged: true, projectileSpeed: 11
     },
 
     Alex: {
-        hp: 100, speed: 3.2, damage: 12.5, cooldown: 1000,
+        hp: 100, speed: 3.2, damage: 10.5, cooldown: 1000,
         attack: "AlexTritt", special: "kick", critChance: 0.1
     },
 
     HenningPrime: {
-        hp: 85, speed: 3.8, damage: 10, cooldown: 550,
+        hp: 85, speed: 3.8, damage: 10, cooldown: 650,
         attack: "HenningKratzer", special: "teleport"
     },
 
     MaxH: {
-        hp: 115, speed: 2.5, damage: 14, cooldown: 1500,
+        hp: 120, speed: 2.5, damage: 14, cooldown: 1500,
         attack: "MaxBauchStoss", special: "push",
         superarmor: true
     },
 
     Fabian: {
-        hp: 90, speed: 3.2, damage: 10.5, cooldown: 1000,
+        hp: 90, speed: 3.2, damage: 10, cooldown: 1000,
         attack: "FabianButter", special: "slippery",
-        ranged: true, projectileSpeed: 20
+        ranged: true, projectileSpeed: 13
     },
 
     Isabella: {
-        hp: 90, speed: 3.4, damage: 12.5, cooldown: 1300,
+        hp: 90, speed: 3.4, damage: 10, cooldown: 1300,
         attack: "IsabellaPinsel", special: "paintstorm",
         ranged: true, arc: true
     },
@@ -624,12 +739,12 @@ const characters = {
     Collin: {
         hp: 100, speed: 3.3, damage: 12, cooldown: 950,
         attack: "CollinAngriff", special: "collinSpeed",
-        ranged: true, projectileSpeed: 12
+        range: true, projectileSpeed: 12
     },
 
     // Jannes wirft das Steak im Bogen und verwandelt sich mit seiner Ult in Luis (bis zum Rundenende)
     Jannes: {
-        hp: 100, speed: 3.2, damage: 12.5, cooldown: 1000,
+        hp: 100, speed: 3.2, damage: 11, cooldown: 1000,
         attack: "JannesSteak", special: "transform", transformTo: "Luis",
         ranged: true, arc: true
     },
@@ -1256,6 +1371,62 @@ function createCharacterButtons() {
 
 }
 
+
+// ---------- Spielernamen ----------
+const playerNames = { 1: "", 2: "" };
+
+function cleanName(v) {
+    return String(v || "").replace(/[<>\u0000-\u001f]/g, "").replace(/\s+/g, " ").trim().slice(0, 12);
+}
+
+function displayName(n) {
+    if (gameMode === "bot" && n === 2) return "Bot";
+    return playerNames[n] || ("Spieler " + n);
+}
+
+function hudName(n) {
+    const p = players[n];
+    const ch = (p && p.character) || (n === 1 ? selected1 : selected2) || "";
+    if (gameMode === "bot" && n === 2) return "BOT • " + ch;
+    return playerNames[n] ? playerNames[n] + " • " + ch : ch;
+}
+
+function refreshNames() {
+    [1, 2].forEach(function(n) { $("name" + n).textContent = hudName(n); });
+}
+
+function setPlayerName(n, value, remote) {
+    const c = cleanName(value);
+    playerNames[n] = c;
+
+    const inp = $("name-input-" + n);
+    if (inp && inp.value !== c && (remote || document.activeElement !== inp)) inp.value = c;
+
+    if (!remote) {
+        try { localStorage.setItem("battleName" + n, c); } catch (e) {}
+    }
+
+    if (gameStarted) refreshNames();
+}
+
+function initNameInputs() {
+    [1, 2].forEach(function(n) {
+        const inp = $("name-input-" + n);
+        if (!inp) return;
+
+        try {
+            const saved = localStorage.getItem("battleName" + n);
+            if (saved) setPlayerName(n, saved, true);
+        } catch (e) {}
+
+        inp.addEventListener("input", function() {
+            const locked = (netRole && n !== netMe()) || (n === 1 ? ready1 : ready2);
+            if (locked) { inp.value = playerNames[n]; return; }
+            setPlayerName(n, inp.value, false);
+        });
+    });
+}
+
 function selectCharacter(player, name, element) {
 
     if (netRole && !netRemoteApply && player !== netMe()) return;
@@ -1275,7 +1446,7 @@ function selectCharacter(player, name, element) {
     element.classList.add("selected");
     updatePreview(player, name);
 
-    if (netRole && !netRemoteApply) netSend({ k: "sel", p: player, n: name });
+    if (netRole && !netRemoteApply) netSend({ k: "sel", p: player, n: name, nm: playerNames[player] });
 
 }
 
@@ -1290,7 +1461,7 @@ function readyPlayer(player) {
     const chosen = player === 1 ? selected1 : selected2;
 
     if (!chosen) {
-        alert("Spieler " + player + " muss zuerst einen Charakter auswählen.");
+        alert(displayName(player) + " muss zuerst einen Charakter auswählen.");
         return;
     }
 
@@ -1301,10 +1472,13 @@ function readyPlayer(player) {
 
     const label = $("ready" + player);
 
+    const nameInput = $("name-input-" + player);
+    if (nameInput) nameInput.readOnly = isReady;
+
     label.textContent = isReady ? "BEREIT!" : "NICHT BEREIT";
     label.classList.toggle("ready-active", isReady);
 
-    if (netRole && !netRemoteApply) netSend({ k: "ready", p: player, v: isReady });
+    if (netRole && !netRemoteApply) netSend({ k: "ready", p: player, v: isReady, nm: playerNames[player] });
 
     if (gameMode === "bot" && player === 1 && ready1) {
         startBotIfReady();
@@ -1540,8 +1714,7 @@ async function startGame() {
     players[1].character = selected1;
     players[2].character = selected2;
 
-    $("name1").textContent = selected1;
-    $("name2").textContent = gameMode === "bot" ? "BOT • " + selected2 : selected2;
+    refreshNames();
 
     $("player1-img").src = IMG_CHAR + selected1 + ".png";
     $("player2-img").src = IMG_CHAR + selected2 + ".png";
@@ -1669,7 +1842,7 @@ function endRound(winner, reason) {
     clearHazards();
     clearProjectiles();
 
-    showBanner(reason, "Spieler " + winner + " gewinnt die Runde  (" + wins[1] + " : " + wins[2] + ")");
+    showBanner(reason, displayName(winner).toUpperCase() + " gewinnt die Runde  (" + wins[1] + " : " + wins[2] + ")");
 
     setTimeout(function() {
 
@@ -1700,15 +1873,53 @@ function endGame(winner) {
     $("game").classList.add("hidden");
     $("game-over").classList.remove("hidden");
 
-    $("winner").textContent = `SPIELER ${winner} GEWINNT!`;
-    const statLine = function(n) {
-        const st = stats[n];
-        return `Spieler ${n}: ${Math.round(st.damage)} Schaden • ${st.parries} Paraden • ` +
-               `${st.dodges} Ausweicher • ${st.crits} Krits • Combo x${st.maxCombo}`;
-    };
+    $("winner").textContent = displayName(winner).toUpperCase() + " GEWINNT!";
+    $("final-score").textContent = "RUNDEN  " + wins[1] + " : " + wins[2];
 
-    $("final-score").textContent =
-        `Runden: ${wins[1]} : ${wins[2]}\n${statLine(1)}\n${statLine(2)}`;
+    const over = $("game-over");
+    over.dataset.winner = String(winner);
+
+    const wc = players[winner].character;
+    $("go-portrait").src = IMG_CHAR + wc + ".png";
+    $("go-hero").style.setProperty("--c", CHARACTER_COLORS[wc] || "#888");
+
+    const cards = $("go-cards");
+    cards.textContent = "";
+
+    [1, 2].forEach(function(n) {
+        const st = stats[n];
+        const card = document.createElement("div");
+        card.className = "go-card p" + n + (n === winner ? " win" : "");
+
+        const h = document.createElement("h3");
+        h.textContent = displayName(n) + (n === winner ? " 👑" : "");
+        card.appendChild(h);
+
+        const ch = document.createElement("div");
+        ch.className = "ch";
+        ch.textContent = players[n].character;
+        card.appendChild(ch);
+
+        [
+            ["Schaden", Math.round(st.damage)],
+            ["Paraden", st.parries],
+            ["Ausweicher", st.dodges],
+            ["Krits", st.crits],
+            ["Max. Combo", "x" + st.maxCombo]
+        ].forEach(function(r) {
+            const row = document.createElement("div");
+            row.className = "row";
+            const l = document.createElement("span");
+            l.textContent = r[0];
+            const v = document.createElement("b");
+            v.textContent = r[1];
+            row.appendChild(l);
+            row.appendChild(v);
+            card.appendChild(row);
+        });
+
+        cards.appendChild(card);
+    });
 
 }
 
@@ -3590,7 +3801,7 @@ function refreshLook(n) {
         img.src = IMG_CHAR + p.character + ".png";
     }
 
-    $("name" + n).textContent = (gameMode === "bot" && n === 2 ? "BOT • " : "") + p.character;
+    $("name" + n).textContent = hudName(n);
 
 }
 
@@ -3954,7 +4165,7 @@ function collectItem(player, type, item) {
     burst(item.x, item.y, 10, "#fff6a0", 80, 8);
     sfx("item");
 
-    showMessage(type.icon + " Spieler " + player + ": " + type.text);
+    showMessage(type.icon + " " + displayName(player) + ": " + type.text);
 
 }
 
@@ -4689,12 +4900,14 @@ function netOnMessage(m) {
         case "sel": {
             const el = document.querySelector("#characters-p" + m.p + " .character-option[title='" + m.n + "']");
             if (!el) break;
+            if (typeof m.nm === "string") setPlayerName(m.p, m.nm, true);
             netRemoteApply = true;
             try { selectCharacter(m.p, m.n, el); } finally { netRemoteApply = false; }
             break;
         }
 
         case "ready": {
+            if (typeof m.nm === "string") setPlayerName(m.p, m.nm, true);
             const cur = m.p === 1 ? ready1 : ready2;
             if (cur === m.v) break;
             netRemoteApply = true;
@@ -4791,6 +5004,7 @@ function netBuildSnapshot() {
         f: fighting ? 1 : 0,
         w: [wins[1], wins[2]],
         rn: roundNumber,
+        nm: [playerNames[1], playerNames[2]],
         rs: roundStart - now,
         sd: suddenDeath ? 1 : 0,
         it: items.map(function(i) {
@@ -4841,6 +5055,15 @@ function netApplySnapshot(s) {
         });
         if (p.character !== prevChar) refreshLook(n);
     });
+
+    if (s.nm) {
+        const a = cleanName(s.nm[0]), b = cleanName(s.nm[1]);
+        if (a !== playerNames[1] || b !== playerNames[2]) {
+            playerNames[1] = a;
+            playerNames[2] = b;
+            refreshNames();
+        }
+    }
 
     fighting = !!s.f;
     wins[1] = s.w[0];
@@ -4963,6 +5186,7 @@ function setupArena() {
 }
 
 createCharacterButtons();
+initNameInputs();
 
 </script>
 
