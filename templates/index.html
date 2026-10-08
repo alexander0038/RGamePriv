@@ -5512,5 +5512,32 @@ initNameInputs();
     requestAnimationFrame(poll);
 })();
 </script>
+<script>
+// Cooldown-Anzeige auf den Touch-Tasten (Block, Dash, Spezial)
+(function() {
+    var icons = {};
+    function tick() {
+        try {
+            var now = Date.now();
+            document.querySelectorAll("#touch-ui .tbtn").forEach(function(b) {
+                var kind = b.classList.contains("block") ? "block" : b.classList.contains("dash") ? "dash" : b.classList.contains("special") ? "special" : null;
+                if (!kind) return;
+                var n = b.closest(".tp-p1") ? 1 : 2, p = players[n];
+                if (!p) return;
+                var key = n + kind; if (!(key in icons)) icons[key] = b.textContent;
+                var left = 0, ready = true;
+                if (kind === "block") left = p.blockReadyAt - now;
+                else if (kind === "dash") left = DASH_COOLDOWN - (now - p.lastDash);
+                else ready = !!p.specialReady;
+                var txt = kind === "special" ? icons[key] : (left > 0 ? (left / 1000).toFixed(1) : icons[key]);
+                if (b.textContent !== txt) b.textContent = txt;
+                b.style.opacity = (kind === "special" ? ready : left <= 0) ? "" : "0.45";
+            });
+        } catch (e) {}
+        requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+})();
+</script>
 </body>
 </html>
