@@ -739,7 +739,7 @@ const characters = {
     Collin: {
         hp: 100, speed: 3.3, damage: 12, cooldown: 950,
         attack: "CollinAngriff", special: "collinSpeed",
-        range: true, projectileSpeed: 12
+        ranged: true, projectileSpeed: 12
     },
 
     // Jannes wirft das Steak im Bogen und verwandelt sich mit seiner Ult in Luis (bis zum Rundenende)
@@ -5437,5 +5437,80 @@ initNameInputs();
 })();
 </script>
 
+<script>
+// Extras: Einstellungen (Esc), Siegesstatistik, Vibration, Screenshake-Schalter, Gamepad
+(function() {
+    function load(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+    function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+    var cfg = load("battleCfg", { shake: true, vibrate: true });
+    var stats = load("battleStats", {});
+
+    var _shake = window.shake;
+    if (typeof _shake === "function") window.shake = function() { if (cfg.shake) return _shake.apply(this, arguments); };
+
+    var _hit = window.applyDamage;
+    if (typeof _hit === "function") window.applyDamage = function() {
+        if (cfg.vibrate && navigator.vibrate) navigator.vibrate(25);
+        return _hit.apply(this, arguments);
+    };
+
+    var _end = window.endRound;
+    if (typeof _end === "function") window.endRound = function(winner, reason) {
+        try {
+            if (fighting) {
+                var w = players[winner].character, l = players[otherPlayer(winner)].character;
+                var k = w + " > " + l; stats[k] = (stats[k] || 0) + 1; save("battleStats", stats);
+            }
+        } catch (e) {}
+        return _end.apply(this, arguments);
+    };
+
+    var box = document.createElement("div");
+    box.style.cssText = "position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.8);color:#fff;display:none;align-items:center;justify-content:center;font-family:sans-serif";
+    document.body.appendChild(box);
+    function render() {
+        var rows = Object.keys(stats).sort(function(a, b) { return stats[b] - stats[a]; }).slice(0, 10)
+            .map(function(k) { return "<div>" + k + ": " + stats[k] + "</div>"; }).join("") || "<div>Noch keine Siege.</div>";
+        box.innerHTML = "<div style='background:#222;padding:20px;border-radius:12px;min-width:260px;max-height:90vh;overflow:auto'>" +
+            "<h3 style='margin:0 0 10px'>Einstellungen</h3>" +
+            "<label><input type=checkbox id=xs " + (cfg.shake ? "checked" : "") + "> Screenshake</label><br>" +
+            "<label><input type=checkbox id=xv " + (cfg.vibrate ? "checked" : "") + "> Vibration bei Treffern</label>" +
+            "<h4 style='margin:14px 0 6px'>Siege (Sieger &gt; Besiegter)</h4>" + rows +
+            "<button id=xc style='margin-top:14px;padding:8px 16px'>Schließen</button></div>";
+        box.querySelector("#xs").onchange = function(e) { cfg.shake = e.target.checked; save("battleCfg", cfg); };
+        box.querySelector("#xv").onchange = function(e) { cfg.vibrate = e.target.checked; save("battleCfg", cfg); };
+        box.querySelector("#xc").onclick = function() { box.style.display = "none"; };
+    }
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "Escape") { render(); box.style.display = box.style.display === "flex" ? "none" : "flex"; }
+    });
+
+    // Gamepad: Pad 0 = Spieler 1, Pad 1 = Spieler 2 (gleiche Tasten wie die Tastatur)
+    var SETS = [
+        { l: "a", r: "d", j: "w", d: "s", a: "e", s: "q", b: "r" },
+        { l: "j", r: "l", j: "i", d: "k", a: "o", s: "u", b: "p" }
+    ];
+    var held = {};
+    function set(id, key, on) {
+        var h = held[id + key];
+        if (on === !!h) return;
+        held[id + key] = on;
+        document.dispatchEvent(new KeyboardEvent(on ? "keydown" : "keyup", { key: key, bubbles: true }));
+    }
+    function poll() {
+        var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+        for (var i = 0; i < 2; i++) {
+            var p = pads[i]; if (!p) continue;
+            var S = SETS[i], b = function(n) { return p.buttons[n] && p.buttons[n].pressed; };
+            var x = p.axes[0] || 0;
+            set(i, S.l, x < -0.4 || b(14)); set(i, S.r, x > 0.4 || b(15));
+            set(i, S.j, b(0) || b(12)); set(i, S.d, b(13));
+            set(i, S.a, b(2)); set(i, S.s, b(3)); set(i, S.b, b(1) || b(5));
+        }
+        requestAnimationFrame(poll);
+    }
+    requestAnimationFrame(poll);
+})();
+</script>
 </body>
 </html>
